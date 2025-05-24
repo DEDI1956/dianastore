@@ -13,7 +13,6 @@
       --gray: #f3f4f6;
       --dark: #222;
     }
-    /* ------ seluruh CSS seperti versi kamu ------ */
     body {
       margin: 0;
       padding: 0;
@@ -385,8 +384,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 </head>
 <body>
-  <!-- ------ seluruh HTML kamu tetap ------- -->
-  <!-- Header -->
   <div class="header">
     <div class="logo">DIANA</div>
     <div class="search">
@@ -398,18 +395,12 @@
     </button>
   </div>
 
-  <!-- Banner -->
   <div class="banner">
     <img src="https://images.unsplash.com/photo-1519125323398-675f0ddb6308?auto=format&fit=crop&w=800&q=80" alt="Promo">
   </div>
-
-  <!-- Categories -->
   <div class="categories" id="categories"></div>
-
-  <!-- Product Grid -->
   <div class="products" id="products"></div>
 
-  <!-- Product Detail Modal -->
   <div id="productDetailModal">
     <div class="detail-content">
       <button class="close-btn" onclick="closeProductDetail()">&times;</button>
@@ -420,8 +411,6 @@
       <button id="detailBuyBtn">Beli</button>
     </div>
   </div>
-
-  <!-- Cart Modal -->
   <div id="cartModal">
     <div class="cart-modal-content">
       <button class="close-modal-btn" onclick="closeCart()">&times;</button>
@@ -431,8 +420,6 @@
       <button class="cart-checkout-btn" onclick="openCheckout()">Checkout</button>
     </div>
   </div>
-
-  <!-- Checkout Page -->
   <div id="checkoutPage">
     <div class="checkout-content">
       <button class="close-modal-btn" onclick="closeCheckout()">&times;</button>
@@ -447,8 +434,6 @@
       <button class="checkout-pay-btn" onclick="payOrder()">Bayar</button>
     </div>
   </div>
-
-  <!-- Notif Modal -->
   <div id="notifModal">
     <div class="notif-content">
       <button class="close-modal-btn" onclick="closeNotifModal()">&times;</button>
@@ -457,8 +442,6 @@
       <div class="notif-empty" id="notifEmpty"></div>
     </div>
   </div>
-
-  <!-- Bottom Navigation -->
   <div class="bottom-nav">
     <a href="#" class="nav-item active" id="navHome"><span>🏠</span>Home</a>
     <a href="#" class="nav-item" id="navKategori"><span>🗂️</span>Kategori</a>
@@ -466,7 +449,6 @@
     <a href="#" class="nav-item" id="navCart"><span>🛒</span>Keranjang <span id="cartCount" style="font-size:0.82rem;color:var(--orange);"></span></a>
     <a href="#" class="nav-item" id="navAccount"><span>👤</span><span id="loginText">Akun</span></a>
   </div>
-
   <script>
     // ---------- FIREBASE CONFIG ----------
     const firebaseConfig = {
@@ -480,8 +462,6 @@
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
-
-    // Kategori tetap array lokal
     const categories = [
       { name: "Elektronik", icon: "💡" },
       { name: "Fashion", icon: "👗" },
@@ -492,11 +472,7 @@
       { name: "Ibu & Anak", icon: "🍼" },
       { name: "Lainnya", icon: "➕" }
     ];
-
-    // Produk dari Firestore (bukan array lokal manual!)
     let products = [];
-
-    // Keranjang & Notif
     let cart = JSON.parse(localStorage.getItem('cart') || '[]');
     function updateCartCount() {
       document.getElementById('cartCount').textContent = cart.length ? `(${cart.length})` : '';
@@ -507,7 +483,6 @@
       updateCartCount();
       showToast('Ditambahkan ke keranjang!');
     }
-    // ---------- KATEGORI ----------
     const catContainer = document.getElementById("categories");
     let selectedCategory = "Semua";
     function renderCategories() {
@@ -531,7 +506,6 @@
         };
       });
     }
-    // ---------- PRODUK ----------
     const prodContainer = document.getElementById("products");
     let searchQuery = '';
     function renderProducts() {
@@ -564,7 +538,6 @@
         }
       });
     }
-    // Ambil produk dari Firestore, real-time
     function listenProdukRealtime() {
       db.collection('products').orderBy('name')
         .onSnapshot(snap => {
@@ -576,7 +549,6 @@
       searchQuery = this.value.trim().toLowerCase();
       renderProducts();
     });
-    // ---------- PRODUK DETAIL ----------
     function openProductDetail(product) {
       document.getElementById('detailImg').src = product.img;
       document.getElementById('detailTitle').textContent = product.name || '';
@@ -591,7 +563,6 @@
     function closeProductDetail() {
       document.getElementById('productDetailModal').style.display = 'none';
     }
-    // ---------- KERANJANG & CHECKOUT ----------
     function openCart() {
       let cartModal = document.getElementById('cartModal');
       let cartItems = document.getElementById('cartItems');
@@ -680,7 +651,6 @@
       }
     }
     updateCartCount();
-    // ---------- NOTIFIKASI ----------
     function showNotifDot() {
       let notif = JSON.parse(localStorage.getItem('notif') || '[]');
       document.getElementById('notifDot').style.display = notif.length ? '' : 'none';
@@ -720,7 +690,6 @@
         `;
       });
     }
-    // ---------- LOGIN/LOGOUT DUMMY ----------
     let user = JSON.parse(localStorage.getItem('user') || 'null');
     function updateLoginText() {
       document.getElementById('loginText').textContent = user ? user.name : 'Akun';
@@ -748,7 +717,6 @@
       loginLogout();
     };
     updateLoginText();
-    // ---------- NAVIGATION ----------
     document.getElementById('navHome').onclick = function(e){ e.preventDefault(); window.scrollTo({top:0,behavior:'smooth'});};
     document.getElementById('navKategori').onclick = function(e){ e.preventDefault(); catContainer.scrollIntoView({behavior:'smooth'});};
     document.getElementById('navChat').onclick = function(e){ e.preventDefault(); showToast('Fitur chat belum tersedia');};
@@ -756,7 +724,6 @@
       e.preventDefault();
       openCart();
     };
-    // ---------- TOAST ----------
     function showToast(msg) {
       let t = document.createElement('div');
       t.textContent = msg;
@@ -764,10 +731,8 @@
       document.body.appendChild(t);
       setTimeout(()=>t.remove(), 1500);
     }
-    // ---------- INIT ----------
     renderCategories();
-    listenProdukRealtime(); // ganti dari renderProducts()
-    // Modal close with backdrop
+    listenProdukRealtime();
     window.onclick = function(e){
       let cartModal = document.getElementById('cartModal');
       let prodModal = document.getElementById('productDetailModal');
