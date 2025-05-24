@@ -13,6 +13,7 @@
       --gray: #f3f4f6;
       --dark: #222;
     }
+    /* ------ seluruh CSS seperti versi kamu ------ */
     body {
       margin: 0;
       padding: 0;
@@ -201,7 +202,6 @@
       font-size: 1.46rem;
       margin-bottom: 2px;
     }
-    /* Cart Modal & Checkout & Notif */
     #cartModal, #checkoutPage, #notifModal, #productDetailModal {
       display:none; 
       position:fixed;
@@ -278,7 +278,6 @@
       color:#aaa;
       cursor:pointer;
     }
-    /* Checkout Page */
     .checkout-header {
       font-weight:bold;
       font-size:1.18rem;
@@ -313,7 +312,6 @@
       display:block;
       width:100%;
     }
-    /* Notif Page */
     .notif-title {
       font-weight:bold;
       font-size:1.12rem;
@@ -382,8 +380,12 @@
       #cartModal .cart-modal-content, #checkoutPage .checkout-content, #notifModal .notif-content { min-width:380px;}
     }
   </style>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 </head>
 <body>
+  <!-- ------ seluruh HTML kamu tetap ------- -->
   <!-- Header -->
   <div class="header">
     <div class="logo">DIANA</div>
@@ -466,7 +468,20 @@
   </div>
 
   <script>
-    // Kategori & Produk
+    // ---------- FIREBASE CONFIG ----------
+    const firebaseConfig = {
+      apiKey: "AIzaSyDG7zWgMe1zdJRaBdH_aWWFRDZyNtDXA0M",
+      authDomain: "brilliant-flame-450916-t4.firebaseapp.com",
+      projectId: "brilliant-flame-450916-t4",
+      storageBucket: "brilliant-flame-450916-t4.firebasestorage.app",
+      messagingSenderId: "319518074786",
+      appId: "1:319518074786:web:15f6e01b22f2437c0474fb",
+      measurementId: "G-44GTKCM9LE"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // Kategori tetap array lokal
     const categories = [
       { name: "Elektronik", icon: "💡" },
       { name: "Fashion", icon: "👗" },
@@ -477,18 +492,10 @@
       { name: "Ibu & Anak", icon: "🍼" },
       { name: "Lainnya", icon: "➕" }
     ];
-    const products = [
-      { name:"Headphone Bluetooth", price:85000, category:"Elektronik", desc:"Headphone bluetooth dengan suara jernih, baterai tahan lama, dan desain nyaman digunakan.", img:"https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=400&q=80" },
-      { name:"Jaket Hoodie Pria", price:95000, category:"Fashion", desc:"Jaket hoodie pria bahan adem, cocok untuk santai maupun bepergian.", img:"https://images.unsplash.com/photo-1512436991641-6745cdb1723f?auto=format&fit=crop&w=400&q=80" },
-      { name:"Sepatu Sneakers Wanita", price:120000, category:"Fashion", desc:"Sneakers wanita trendi dan nyaman dipakai sehari-hari.", img:"https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80" },
-      { name:"Vitamin C 500mg", price:25000, category:"Kesehatan", desc:"Vitamin C 500mg untuk menjaga daya tahan tubuh, isi 30 tablet.", img:"https://images.unsplash.com/photo-1502741338009-cac2772e18bc?auto=format&fit=crop&w=400&q=80" },
-      { name:"Rice Cooker Mini", price:135000, category:"Elektronik", desc:"Rice cooker mini kapasitas 0.6L, cocok untuk anak kos.", img:"https://images.unsplash.com/photo-1519125323398-675f0ddb6308?auto=format&fit=crop&w=400&q=80" },
-      { name:"Bola Basket Official", price:110000, category:"Olahraga", desc:"Bola basket ukuran resmi, material karet premium.", img:"https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=400&q=80" },
-      { name:"Bubur Bayi Organik", price:34000, category:"Ibu & Anak", desc:"Bubur bayi organik rasa buah, aman dan sehat.", img:"https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=80" },
-      { name:"Sofa Minimalis", price:350000, category:"Rumah", desc:"Sofa minimalis dua dudukan, cocok untuk ruang tamu kecil.", img:"https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?auto=format&fit=crop&w=400&q=80" },
-      { name:"Burger Daging Sapi", price:22000, category:"Makanan", desc:"Burger daging sapi homemade, siap makan.", img:"https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=400&q=80" },
-      { name:"Susu UHT 1L", price:18000, category:"Makanan", desc:"Susu UHT 1 liter, cocok untuk sarapan keluarga.", img:"https://images.unsplash.com/photo-1519864600265-abb23847ef2c?auto=format&fit=crop&w=400&q=80" }
-    ];
+
+    // Produk dari Firestore (bukan array lokal manual!)
+    let products = [];
+
     // Keranjang & Notif
     let cart = JSON.parse(localStorage.getItem('cart') || '[]');
     function updateCartCount() {
@@ -531,8 +538,8 @@
       let filtered = products.filter(p =>
         (selectedCategory === 'Semua' || p.category === selectedCategory) &&
         (searchQuery === '' ||
-         p.name.toLowerCase().includes(searchQuery) ||
-         p.category.toLowerCase().includes(searchQuery))
+         (p.name && p.name.toLowerCase().includes(searchQuery)) ||
+         (p.category && p.category.toLowerCase().includes(searchQuery)))
       );
       if(filtered.length === 0) {
         prodContainer.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:#aaa;font-size:1.02rem;">Produk tidak ditemukan.</div>`;
@@ -544,7 +551,7 @@
           <div class="product-card" data-prod="${idx}">
             <img src="${p.img}" alt="${p.name}">
             <div class="product-title">${p.name}</div>
-            <div class="product-price">Rp${p.price.toLocaleString("id-ID")}</div>
+            <div class="product-price">Rp${p.price?.toLocaleString("id-ID")||'0'}</div>
             <button onclick='event.stopPropagation();addToCart(${JSON.stringify(p)})'>Beli</button>
           </div>
         `;
@@ -557,6 +564,14 @@
         }
       });
     }
+    // Ambil produk dari Firestore, real-time
+    function listenProdukRealtime() {
+      db.collection('products').orderBy('name')
+        .onSnapshot(snap => {
+          products = snap.docs.map(doc => doc.data());
+          renderProducts();
+        });
+    }
     document.getElementById('searchInput').addEventListener('input', function(){
       searchQuery = this.value.trim().toLowerCase();
       renderProducts();
@@ -564,9 +579,9 @@
     // ---------- PRODUK DETAIL ----------
     function openProductDetail(product) {
       document.getElementById('detailImg').src = product.img;
-      document.getElementById('detailTitle').textContent = product.name;
+      document.getElementById('detailTitle').textContent = product.name || '';
       document.getElementById('detailDesc').textContent = product.desc || '';
-      document.getElementById('detailPrice').textContent = `Rp${product.price.toLocaleString("id-ID")}`;
+      document.getElementById('detailPrice').textContent = `Rp${(product.price||0).toLocaleString("id-ID")}`;
       document.getElementById('productDetailModal').style.display = 'flex';
       document.getElementById('detailBuyBtn').onclick = function(){
         addToCart(product);
@@ -589,12 +604,12 @@
           <div class="cart-item-row">
             <div class="cart-item-desc">
               <img src="${p.img}" alt="${p.name}">
-              <span>${p.name} <small style="color:var(--orange);margin-left:4px;">Rp${p.price.toLocaleString('id-ID')}</small></span>
+              <span>${p.name} <small style="color:var(--orange);margin-left:4px;">Rp${(p.price||0).toLocaleString('id-ID')}</small></span>
             </div>
             <button class="cart-remove-btn" onclick="removeCartItem(${i})">Hapus</button>
           </div>
         `).join('');
-        total = cart.reduce((sum,p) => sum + p.price, 0);
+        total = cart.reduce((sum,p) => sum + (p.price||0), 0);
         document.getElementById('cartTotal').textContent = `Total: Rp${total.toLocaleString('id-ID')}`;
       }
       cartModal.style.display = 'flex';
@@ -629,11 +644,11 @@
           <div class="checkout-item-row">
             <div class="checkout-item-desc">
               <img src="${p.img}" alt="${p.name}">
-              <span>${p.name} <small style="color:var(--orange);margin-left:4px;">Rp${p.price.toLocaleString('id-ID')}</small></span>
+              <span>${p.name} <small style="color:var(--orange);margin-left:4px;">Rp${(p.price||0).toLocaleString('id-ID')}</small></span>
             </div>
           </div>
         `;
-        total += p.price;
+        total += (p.price||0);
       });
       document.getElementById('checkoutTotal').textContent = `Total: Rp${total.toLocaleString('id-ID')}`;
     }
@@ -751,7 +766,7 @@
     }
     // ---------- INIT ----------
     renderCategories();
-    renderProducts();
+    listenProdukRealtime(); // ganti dari renderProducts()
     // Modal close with backdrop
     window.onclick = function(e){
       let cartModal = document.getElementById('cartModal');
