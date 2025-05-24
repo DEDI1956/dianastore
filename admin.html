@@ -1,11 +1,10 @@
-<!DOCTYPE html>
+Ge<!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Admin Produk</title>
+  <title>Admin Produk (Firebase)</title>
   <style>
-    /* Animated Gradient Background */
     body {
       min-height: 100vh;
       margin: 0;
@@ -105,7 +104,6 @@
     .form-title {
       font-size:1.11rem; font-weight:bold; color:#ff5722; margin-bottom:12px; text-align:center;
     }
-    /* Login box styling */
     .login-backdrop {
       min-height:100vh;
       display:flex;
@@ -138,7 +136,6 @@
     .err-msg {
       color:#d00; text-align:center; font-size:.98rem; margin-bottom:7px;
     }
-    /* Floating animation for illustration */
     .login-anim-img {
       width:60px; margin-bottom:10px; filter:drop-shadow(0 2px 8px #ffb6c1cc);
       animation:floatimg 2.8s ease-in-out infinite alternate;
@@ -153,6 +150,9 @@
       .login-box {width:99vw; margin:0 0;}
     }
   </style>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 </head>
 <body>
   <!-- Login Section -->
@@ -193,12 +193,27 @@
         <input type="file" id="gambar" accept="image/*" style="margin-top:7px;">
         <img id="imgPreview" class="img-preview" style="display:none;">
       </label>
-      <input type="hidden" id="editIndex" value="">
+      <input type="hidden" id="editId" value="">
       <button type="submit" id="submitBtn">Tambah Produk</button>
     </form>
     <div class="produk-list" id="produkList"></div>
   </div>
   <script>
+    // --- Firebase Config Sesuai Punya Kamu ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyDG7zWgMe1zdJRaBdH_aWWFRDZyNtDXA0M",
+      authDomain: "brilliant-flame-450916-t4.firebaseapp.com",
+      projectId: "brilliant-flame-450916-t4",
+      storageBucket: "brilliant-flame-450916-t4.firebasestorage.app",
+      messagingSenderId: "319518074786",
+      appId: "1:319518074786:web:15f6e01b22f2437c0474fb",
+      measurementId: "G-44GTKCM9LE"
+    };
+
+    // Init Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
     // ===== ADMIN LOGIN SECTION =====
     // Ganti username/password di sini
     const ADMIN_USER = "admin";
@@ -241,13 +256,6 @@
       setLogin(false);
       showLogin();
     }
-    // ===== PRODUK STORAGE =====
-    function loadProduk() {
-      return JSON.parse(localStorage.getItem('products') || '[]');
-    }
-    function saveProduk(arr) {
-      localStorage.setItem('products', JSON.stringify(arr));
-    }
     // ===== TOAST NOTIF ======
     function showToast(msg) {
       let t = document.createElement('div');
@@ -264,7 +272,7 @@
     const deskripsi = document.getElementById("deskripsi");
     const gambar = document.getElementById("gambar");
     const imgPreview = document.getElementById("imgPreview");
-    const editIndex = document.getElementById("editIndex");
+    const editId = document.getElementById("editId");
     let lastImage = "";
     gambar.onchange = function() {
       const file = gambar.files[0];
@@ -282,54 +290,40 @@
       form.reset();
       imgPreview.style.display = "none";
       lastImage = "";
-      editIndex.value = "";
+      editId.value = "";
       document.getElementById("formTitle").textContent = "Tambah Produk Baru";
       document.getElementById("submitBtn").textContent = "Tambah Produk";
       gambar.required = true;
     }
-    form.onsubmit = function(e) {
-      e.preventDefault();
-      let arr = loadProduk();
-      let name = nama.value.trim();
-      let price = parseInt(harga.value,10);
-      let cat = kategori.value;
-      let desc = deskripsi.value.trim();
-      let img = lastImage;
-      let idx = editIndex.value;
-      // Validasi
-      if(!name || !cat) return showToast("Semua field wajib diisi!");
-      if(price < 0) return showToast("Harga tidak boleh negatif!");
-      if(idx === "") {
-        // Tambah produk
-        if(arr.some(p=>p.name.toLowerCase()===name.toLowerCase())) return showToast("Nama produk sudah ada!");
-        if(!img) return showToast("Gambar wajib diupload!");
-        arr.push({name, price, category:cat, desc, img});
-        saveProduk(arr);
-        showToast("Produk berhasil ditambah!");
-      } else {
-        // Edit produk
-        let index = parseInt(idx,10);
-        // Pastikan nama unik kecuali milik sendiri
-        if(arr.some((p,i)=>p.name.toLowerCase()===name.toLowerCase()&&i!==index)) return showToast("Nama produk sudah ada!");
-        if(!img) return showToast("Gambar wajib diupload!");
-        arr[index] = {name, price, category:cat, desc, img};
-        saveProduk(arr);
-        showToast("Produk diperbarui!");
-      }
-      renderProdukList();
-      resetForm();
-    };
-    // ===== RENDER PRODUK LIST =====
-    function renderProdukList() {
+
+    // ===== CRUD PRODUK FIRESTORE =====
+    async function tambahProduk(data) {
+      // Pastikan nama produk unik
+      const cek = await db.collection('products').where("name", "==", data.name).get();
+      if(!cek.empty) throw new Error("Nama produk sudah ada!");
+      await db.collection('products').add(data);
+    }
+    async function updateProduk(id, data) {
+      // Pastikan nama produk unik kecuali milik sendiri
+      const cek = await db.collection('products').where("name", "==", data.name).get();
+      if(!cek.empty && cek.docs[0].id !== id) throw new Error("Nama produk sudah ada!");
+      await db.collection('products').doc(id).set(data);
+    }
+    async function hapusProduk(id) {
+      await db.collection('products').doc(id).delete();
+    }
+    // ===== RENDER PRODUK =====
+    async function renderProdukList() {
       const list = document.getElementById('produkList');
-      const data = loadProduk();
-      if(data.length === 0) {
+      list.innerHTML = "<div style='color:#aaa; text-align:center;'>Memuat...</div>";
+      const snap = await db.collection('products').orderBy('name').get();
+      if(snap.empty) {
         list.innerHTML = "<div style='color:#aaa; text-align:center;'>Belum ada produk.</div>";
         return;
       }
       list.innerHTML = "<b>Daftar Produk:</b>";
-      data.slice().reverse().forEach((p, i) => {
-        const idx = data.length - 1 - i;
+      snap.forEach(doc => {
+        const p = doc.data();
         list.innerHTML += `
           <div class="produk-item">
             <img src="${p.img}">
@@ -338,16 +332,51 @@
               <div class="produk-kat">${p.category}</div>
               <div class="produk-harga">Rp${p.price.toLocaleString("id-ID")}</div>
             </div>
-            <button class="btn-edit" onclick="editProduk(${idx})">Edit</button>
-            <button class="btn-hapus" onclick="hapusProduk(${idx})">Hapus</button>
+            <button class="btn-edit" onclick="editProduk('${doc.id}')">Edit</button>
+            <button class="btn-hapus" onclick="hapusProdukPrompt('${doc.id}')">Hapus</button>
           </div>
         `;
       });
     }
+    // ===== FORM SUBMIT =====
+    form.onsubmit = async function(e) {
+      e.preventDefault();
+      let name = nama.value.trim();
+      let price = parseInt(harga.value,10);
+      let cat = kategori.value;
+      let desc = deskripsi.value.trim();
+      let img = lastImage;
+      let id = editId.value;
+      // Validasi
+      if(!name || !cat) return showToast("Semua field wajib diisi!");
+      if(price < 0) return showToast("Harga tidak boleh negatif!");
+      if(id === "") {
+        // Tambah produk
+        if(!img) return showToast("Gambar wajib diupload!");
+        try {
+          await tambahProduk({name, price, category:cat, desc, img});
+          showToast("Produk berhasil ditambah!");
+        } catch(err) {
+          showToast(err.message);
+        }
+      } else {
+        // Edit produk
+        if(!img) return showToast("Gambar wajib diupload!");
+        try {
+          await updateProduk(id, {name, price, category:cat, desc, img});
+          showToast("Produk diperbarui!");
+        } catch(err) {
+          showToast(err.message);
+        }
+      }
+      renderProdukList();
+      resetForm();
+    };
     // ===== EDIT / HAPUS =====
-    window.editProduk = function(idx) {
-      const arr = loadProduk();
-      const p = arr[idx];
+    window.editProduk = async function(id) {
+      const doc = await db.collection('products').doc(id).get();
+      if(!doc.exists) return;
+      const p = doc.data();
       nama.value = p.name;
       harga.value = p.price;
       kategori.value = p.category;
@@ -355,21 +384,20 @@
       imgPreview.src = p.img;
       imgPreview.style.display = "block";
       lastImage = p.img;
-      editIndex.value = idx;
+      editId.value = id;
       document.getElementById("formTitle").textContent = "Edit Produk";
       document.getElementById("submitBtn").textContent = "Update Produk";
       gambar.required = false;
       gambar.value = "";
       window.scrollTo({top:0,behavior:'smooth'});
     }
-    window.hapusProduk = function(idx) {
+    window.hapusProdukPrompt = function(id) {
       if(!confirm("Yakin hapus produk ini?")) return;
-      let data = loadProduk();
-      data.splice(idx,1);
-      saveProduk(data);
-      renderProdukList();
-      showToast("Produk dihapus!");
-      resetForm();
+      hapusProduk(id).then(()=>{
+        renderProdukList();
+        showToast("Produk dihapus!");
+        resetForm();
+      });
     }
     // ===== INISIALISASI LOGIN/PANEL ======
     window.onload = function() {
