@@ -5,42 +5,54 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>Admin Produk</title>
   <style>
+    /* Animated Gradient Background */
     body {
-      background: #f4f6fa;
-      font-family: 'Segoe UI', Arial, sans-serif;
+      min-height: 100vh;
       margin: 0;
       padding: 0;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(-45deg, #f54ea2, #ff7676, #17ead9, #6078ea);
+      background-size: 400% 400%;
+      animation: gradientBG 13s ease infinite;
+    }
+    @keyframes gradientBG {
+      0% {background-position:0% 50%;}
+      50% {background-position:100% 50%;}
+      100% {background-position:0% 50%;}
     }
     .admin-container {
-      max-width: 500px;
-      margin: 36px auto;
-      background: #fff;
-      border-radius: 14px;
-      box-shadow: 0 4px 20px #0002;
-      padding: 28px 20px 28px 20px;
-      min-height: 60vh;
-      position: relative;
+      max-width:500px;
+      margin:36px auto;
+      background:rgba(255,255,255,0.98);
+      border-radius:14px;
+      box-shadow:0 8px 32px #0002;
+      padding:28px 20px 28px 20px;
+      min-height:60vh;
+      position:relative;
+      z-index:2;
     }
     h2 {
       margin: 0 0 12px 0;
       color: #ff5722;
       text-align: center;
+      letter-spacing:1px;
     }
-    form, .produk-list {margin-top: 23px;}
-    label {font-weight: 500; color: #333;}
+    form, .produk-list {margin-top:23px;}
+    label {font-weight:500; color:#333;}
     input, textarea, select {
-      padding: 9px;
-      font-size: 1rem;
-      border-radius: 6px;
-      border: 1.2px solid #ddd;
-      margin-top: 5px;
-      margin-bottom: 10px;
-      width: 100%;
-      box-sizing: border-box;
-      transition: border .18s;
+      padding:9px;
+      font-size:1rem;
+      border-radius:6px;
+      border:1.2px solid #ddd;
+      margin-top:5px;
+      margin-bottom:10px;
+      width:100%;
+      box-sizing:border-box;
+      transition:.18s;
+      background: #f8fafd;
     }
-    input:focus, textarea:focus, select:focus {border-color: #ff5722;}
-    textarea {resize: vertical;}
+    input:focus, textarea:focus, select:focus {border-color:#ff5722;}
+    textarea {resize:vertical;}
     button[type="submit"], .btn {
       background: #ff5722;
       color: #fff;
@@ -55,70 +67,106 @@
       transition: background .17s;
     }
     button[type="submit"]:hover, .btn:hover {background: #e64a19;}
-    .img-preview {max-width: 100px; max-height: 100px; border-radius: 8px; margin-top: 6px;}
-    .produk-list {margin-top: 32px;}
+    .img-preview {max-width:100px; max-height:100px; border-radius:8px; margin-top:6px;}
+    .produk-list {margin-top:32px;}
     .produk-item {
-      display: flex; align-items: center; gap: 13px; padding: 11px 0;
-      border-bottom: 1px solid #eee;
-      transition: background .13s;
+      display:flex;align-items:center;gap:13px;padding:11px 0;
+      border-bottom:1px solid #eee;
+      transition:background .13s;
     }
-    .produk-item img {width: 45px; height: 45px; border-radius: 6px; object-fit: cover;}
-    .produk-info {flex: 1;}
-    .produk-title {font-weight: bold;}
-    .produk-kat {color: #ff5722; font-size: 0.94rem;}
-    .produk-harga {font-size: 0.97rem; color: #222;}
+    .produk-item img {width:45px; height:45px; border-radius:6px; object-fit:cover;}
+    .produk-info {flex:1;}
+    .produk-title {font-weight:bold;}
+    .produk-kat {color:#ff5722;font-size:0.94rem;}
+    .produk-harga {font-size:0.97rem;color:#222;}
     .btn-edit, .btn-hapus {
-      padding: 4px 13px; border-radius: 4px; border: none; cursor: pointer; font-size: 0.99rem;
-      margin-left: 5px;
+      padding:4px 13px; border-radius:4px; border:none; cursor:pointer; font-size:0.99rem;
+      margin-left:5px;
     }
-    .btn-edit {background: #2196f3; color: #fff;}
-    .btn-edit:hover {background: #1769aa;}
-    .btn-hapus {background: #eee; color: #d00;}
-    .btn-hapus:hover {background: #fce4e4;}
+    .btn-edit {background:#2196f3; color:#fff;}
+    .btn-edit:hover {background:#1769aa;}
+    .btn-hapus {background:#eee;color:#d00;}
+    .btn-hapus:hover {background:#fce4e4;}
     .toast {
-      position: fixed; left: 50%; bottom: 36px; transform: translateX(-50%);
-      background: #ff5722; color: #fff; padding: 11px 26px; border-radius: 7px;
-      font-weight: bold; font-size: 1.05rem; box-shadow: 0 2px 10px #0002; z-index: 99;
-      animation: toastin 0.22s cubic-bezier(.33,1.65,.74,.98);
+      position:fixed; left:50%; bottom:36px; transform:translateX(-50%);
+      background:#ff5722; color:#fff; padding:11px 26px; border-radius:7px;
+      font-weight:bold; font-size:1.05rem; box-shadow:0 2px 10px #0002; z-index:99;
+      animation:toastin 0.22s cubic-bezier(.33,1.65,.74,.98);
     }
     @keyframes toastin {
-      from { opacity: 0; transform: translateX(-50%) translateY(20px);}
-      to   { opacity: 1; transform: translateX(-50%) translateY(0);}
+      from { opacity:0; transform:translateX(-50%) translateY(20px);}
+      to   { opacity:1; transform:translateX(-50%) translateY(0);}
     }
     .logout-btn {
-      position: absolute; top: 17px; right: 20px; font-size: 1.02rem;
-      background: #eee; color: #ff5722; border: none; border-radius: 5px; padding: 4px 13px; cursor: pointer;
+      position:absolute; top:17px; right:20px; font-size:1.02rem;
+      background:#eee; color:#ff5722; border:none; border-radius:5px; padding:4px 13px; cursor:pointer;
     }
-    .logout-btn:hover {background: #ffccbc;}
+    .logout-btn:hover {background:#ffccbc;}
     .form-title {
-      font-size: 1.11rem; font-weight: bold; color: #ff5722; margin-bottom: 12px; text-align: center;
+      font-size:1.11rem; font-weight:bold; color:#ff5722; margin-bottom:12px; text-align:center;
+    }
+    /* Login box styling */
+    .login-backdrop {
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      position:relative;
+      z-index:1;
     }
     .login-box {
-      max-width: 340px; margin: 60px auto 0 auto; background: #fff; border-radius: 12px;
-      box-shadow: 0 2px 12px #0001; padding: 28px 20px;
+      width:340px;
+      background:rgba(255,255,255,0.97);
+      border-radius:17px;
+      box-shadow:0 8px 32px #0004;
+      padding:36px 22px 28px 22px;
+      display:flex; flex-direction:column;
+      align-items:center;
+      position:relative;
     }
-    .login-box h2 {margin-bottom: 18px;}
-    .login-box input {margin-bottom: 15px;}
-    .login-box .btn {margin-top: 9px;}
+    .login-box h2 {margin-bottom:18px;}
+    .login-box input {
+      margin-bottom:15px;
+      background: #f8fafd;
+      border:1.2px solid #ddd;
+      border-radius:6px;
+    }
+    .login-box .btn {
+      margin-top:9px;
+      width:100%;
+    }
     .err-msg {
-      color: #d00; text-align: center; font-size: .98rem; margin-bottom: 7px;
+      color:#d00; text-align:center; font-size:.98rem; margin-bottom:7px;
     }
-    @media (max-width: 600px) {
-      .admin-container {max-width: 98vw; margin: 0; padding: 16px 2vw;}
-      .login-box {max-width: 99vw; margin: 0 0;}
+    /* Floating animation for illustration */
+    .login-anim-img {
+      width:60px; margin-bottom:10px; filter:drop-shadow(0 2px 8px #ffb6c1cc);
+      animation:floatimg 2.8s ease-in-out infinite alternate;
+      display:block;
+    }
+    @keyframes floatimg {
+      from {transform:translateY(0);}
+      to   {transform:translateY(-15px);}
+    }
+    @media (max-width:600px) {
+      .admin-container {max-width:99vw; margin:0; padding:16px 2vw;}
+      .login-box {width:99vw; margin:0 0;}
     }
   </style>
 </head>
 <body>
   <!-- Login Section -->
-  <div id="loginSection" class="login-box" style="display:none;">
-    <h2>Admin Login</h2>
-    <form id="loginForm">
-      <input type="text" id="adminUser" required placeholder="Username">
-      <input type="password" id="adminPass" required placeholder="Password">
-      <div class="err-msg" id="loginError"></div>
-      <button type="submit" class="btn">Login</button>
-    </form>
+  <div id="loginSection" class="login-backdrop" style="display:none;">
+    <div class="login-box">
+      <img class="login-anim-img" src="https://cdn-icons-png.flaticon.com/512/3064/3064197.png" alt="Admin Icon" />
+      <h2>Admin Login</h2>
+      <form id="loginForm">
+        <input type="text" id="adminUser" required placeholder="Username">
+        <input type="password" id="adminPass" required placeholder="Password">
+        <div class="err-msg" id="loginError"></div>
+        <button type="submit" class="btn">Login</button>
+      </form>
+    </div>
   </div>
   <!-- Admin Section -->
   <div class="admin-container" id="adminPanel" style="display:none;">
@@ -167,8 +215,10 @@
       }
     }
     function showLogin() {
-      document.getElementById("loginSection").style.display = "";
+      document.getElementById("loginSection").style.display = "flex";
       document.getElementById("adminPanel").style.display = "none";
+      document.getElementById("loginError").textContent = "";
+      document.getElementById("loginForm").reset();
     }
     function showAdminPanel() {
       document.getElementById("loginSection").style.display = "none";
