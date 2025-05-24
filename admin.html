@@ -5,31 +5,129 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>Admin Produk</title>
   <style>
-    body {background:#f9f9f9; font-family:sans-serif; margin:0; padding:0;}
-    .container {max-width:420px; margin:32px auto 0 auto; background:#fff; border-radius:10px; box-shadow:0 2px 12px #0001; padding:28px 18px;}
-    h2 {margin:0 0 18px 0; color:#ff5722;}
-    form {display:flex; flex-direction:column; gap:12px;}
-    input, textarea, select {padding:9px; font-size:1rem; border-radius:6px; border:1px solid #ddd;}
-    textarea {resize:vertical;}
-    button[type="submit"] {background:#ff5722; color:#fff;font-weight:bold; border:none; border-radius:6px; padding:10px; font-size:1.07rem;}
-    button[type="submit"]:hover {background:#e64a19;}
-    .img-preview {max-width:90px; max-height:90px; border-radius:8px; margin-top:6px;}
-    .produk-list {margin-top:28px;}
-    .produk-item {display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #eee;}
-    .produk-item img {width:38px;height:38px;border-radius:5px;object-fit:cover;}
-    .produk-info {flex:1;}
-    .produk-title {font-weight:bold;}
-    .produk-kat {color:#ff5722;font-size:0.94rem;}
-    .del-btn {background:#eee;color:#d00;border:none;border-radius:4px;padding:3px 9px;cursor:pointer;}
-    @media (max-width:500px){.container{margin:0; border-radius:0; box-shadow:none;}}
+    body {
+      background: #f4f6fa;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    .admin-container {
+      max-width: 500px;
+      margin: 36px auto;
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 4px 20px #0002;
+      padding: 28px 20px 28px 20px;
+      min-height: 60vh;
+      position: relative;
+    }
+    h2 {
+      margin: 0 0 12px 0;
+      color: #ff5722;
+      text-align: center;
+    }
+    form, .produk-list {margin-top: 23px;}
+    label {font-weight: 500; color: #333;}
+    input, textarea, select {
+      padding: 9px;
+      font-size: 1rem;
+      border-radius: 6px;
+      border: 1.2px solid #ddd;
+      margin-top: 5px;
+      margin-bottom: 10px;
+      width: 100%;
+      box-sizing: border-box;
+      transition: border .18s;
+    }
+    input:focus, textarea:focus, select:focus {border-color: #ff5722;}
+    textarea {resize: vertical;}
+    button[type="submit"], .btn {
+      background: #ff5722;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 0;
+      font-size: 1.07rem;
+      font-weight: bold;
+      width: 100%;
+      cursor: pointer;
+      margin-top: 7px;
+      transition: background .17s;
+    }
+    button[type="submit"]:hover, .btn:hover {background: #e64a19;}
+    .img-preview {max-width: 100px; max-height: 100px; border-radius: 8px; margin-top: 6px;}
+    .produk-list {margin-top: 32px;}
+    .produk-item {
+      display: flex; align-items: center; gap: 13px; padding: 11px 0;
+      border-bottom: 1px solid #eee;
+      transition: background .13s;
+    }
+    .produk-item img {width: 45px; height: 45px; border-radius: 6px; object-fit: cover;}
+    .produk-info {flex: 1;}
+    .produk-title {font-weight: bold;}
+    .produk-kat {color: #ff5722; font-size: 0.94rem;}
+    .produk-harga {font-size: 0.97rem; color: #222;}
+    .btn-edit, .btn-hapus {
+      padding: 4px 13px; border-radius: 4px; border: none; cursor: pointer; font-size: 0.99rem;
+      margin-left: 5px;
+    }
+    .btn-edit {background: #2196f3; color: #fff;}
+    .btn-edit:hover {background: #1769aa;}
+    .btn-hapus {background: #eee; color: #d00;}
+    .btn-hapus:hover {background: #fce4e4;}
+    .toast {
+      position: fixed; left: 50%; bottom: 36px; transform: translateX(-50%);
+      background: #ff5722; color: #fff; padding: 11px 26px; border-radius: 7px;
+      font-weight: bold; font-size: 1.05rem; box-shadow: 0 2px 10px #0002; z-index: 99;
+      animation: toastin 0.22s cubic-bezier(.33,1.65,.74,.98);
+    }
+    @keyframes toastin {
+      from { opacity: 0; transform: translateX(-50%) translateY(20px);}
+      to   { opacity: 1; transform: translateX(-50%) translateY(0);}
+    }
+    .logout-btn {
+      position: absolute; top: 17px; right: 20px; font-size: 1.02rem;
+      background: #eee; color: #ff5722; border: none; border-radius: 5px; padding: 4px 13px; cursor: pointer;
+    }
+    .logout-btn:hover {background: #ffccbc;}
+    .form-title {
+      font-size: 1.11rem; font-weight: bold; color: #ff5722; margin-bottom: 12px; text-align: center;
+    }
+    .login-box {
+      max-width: 340px; margin: 60px auto 0 auto; background: #fff; border-radius: 12px;
+      box-shadow: 0 2px 12px #0001; padding: 28px 20px;
+    }
+    .login-box h2 {margin-bottom: 18px;}
+    .login-box input {margin-bottom: 15px;}
+    .login-box .btn {margin-top: 9px;}
+    .err-msg {
+      color: #d00; text-align: center; font-size: .98rem; margin-bottom: 7px;
+    }
+    @media (max-width: 600px) {
+      .admin-container {max-width: 98vw; margin: 0; padding: 16px 2vw;}
+      .login-box {max-width: 99vw; margin: 0 0;}
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h2>Tambah Produk Baru</h2>
-    <form id="formProduk">
+  <!-- Login Section -->
+  <div id="loginSection" class="login-box" style="display:none;">
+    <h2>Admin Login</h2>
+    <form id="loginForm">
+      <input type="text" id="adminUser" required placeholder="Username">
+      <input type="password" id="adminPass" required placeholder="Password">
+      <div class="err-msg" id="loginError"></div>
+      <button type="submit" class="btn">Login</button>
+    </form>
+  </div>
+  <!-- Admin Section -->
+  <div class="admin-container" id="adminPanel" style="display:none;">
+    <button class="logout-btn" onclick="logoutAdmin()">Logout</button>
+    <h2>Admin Produk</h2>
+    <div class="form-title" id="formTitle">Tambah Produk Baru</div>
+    <form id="formProduk" autocomplete="off">
       <input required type="text" id="nama" placeholder="Nama produk">
-      <input required type="number" id="harga" placeholder="Harga (Rp)">
+      <input required type="number" id="harga" min="0" placeholder="Harga (Rp)">
       <select required id="kategori">
         <option value="">Pilih Kategori</option>
         <option>Elektronik</option>
@@ -44,21 +142,134 @@
       <textarea id="deskripsi" rows="2" placeholder="Deskripsi produk"></textarea>
       <label>
         Foto produk:
-        <input required type="file" id="gambar" accept="image/*">
+        <input type="file" id="gambar" accept="image/*" style="margin-top:7px;">
         <img id="imgPreview" class="img-preview" style="display:none;">
       </label>
-      <button type="submit">Tambah Produk</button>
+      <input type="hidden" id="editIndex" value="">
+      <button type="submit" id="submitBtn">Tambah Produk</button>
     </form>
     <div class="produk-list" id="produkList"></div>
   </div>
   <script>
-    // Load produk dari localStorage
+    // ===== ADMIN LOGIN SECTION =====
+    // Ganti username/password di sini
+    const ADMIN_USER = "admin";
+    const ADMIN_PASS = "diana123";
+
+    function isLoggedIn() {
+      return localStorage.getItem("admin_login") === "true";
+    }
+    function setLogin(state) {
+      if(state) {
+        localStorage.setItem("admin_login", "true");
+      } else {
+        localStorage.removeItem("admin_login");
+      }
+    }
+    function showLogin() {
+      document.getElementById("loginSection").style.display = "";
+      document.getElementById("adminPanel").style.display = "none";
+    }
+    function showAdminPanel() {
+      document.getElementById("loginSection").style.display = "none";
+      document.getElementById("adminPanel").style.display = "";
+      renderProdukList();
+      resetForm();
+    }
+    document.getElementById("loginForm").onsubmit = function(e) {
+      e.preventDefault();
+      const u = document.getElementById("adminUser").value.trim();
+      const p = document.getElementById("adminPass").value;
+      if(u === ADMIN_USER && p === ADMIN_PASS) {
+        setLogin(true);
+        showAdminPanel();
+      } else {
+        document.getElementById("loginError").textContent = "Username/password salah!";
+      }
+    };
+    function logoutAdmin() {
+      setLogin(false);
+      showLogin();
+    }
+    // ===== PRODUK STORAGE =====
     function loadProduk() {
       return JSON.parse(localStorage.getItem('products') || '[]');
     }
     function saveProduk(arr) {
       localStorage.setItem('products', JSON.stringify(arr));
     }
+    // ===== TOAST NOTIF ======
+    function showToast(msg) {
+      let t = document.createElement('div');
+      t.textContent = msg;
+      t.className = 'toast';
+      document.body.appendChild(t);
+      setTimeout(()=>t.remove(), 1600);
+    }
+    // ===== FORM & VALIDASI =====
+    const form = document.getElementById("formProduk");
+    const nama = document.getElementById("nama");
+    const harga = document.getElementById("harga");
+    const kategori = document.getElementById("kategori");
+    const deskripsi = document.getElementById("deskripsi");
+    const gambar = document.getElementById("gambar");
+    const imgPreview = document.getElementById("imgPreview");
+    const editIndex = document.getElementById("editIndex");
+    let lastImage = "";
+    gambar.onchange = function() {
+      const file = gambar.files[0];
+      if(file) {
+        const reader = new FileReader();
+        reader.onload = e => {
+          imgPreview.src = e.target.result;
+          imgPreview.style.display = "block";
+          lastImage = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+    function resetForm() {
+      form.reset();
+      imgPreview.style.display = "none";
+      lastImage = "";
+      editIndex.value = "";
+      document.getElementById("formTitle").textContent = "Tambah Produk Baru";
+      document.getElementById("submitBtn").textContent = "Tambah Produk";
+      gambar.required = true;
+    }
+    form.onsubmit = function(e) {
+      e.preventDefault();
+      let arr = loadProduk();
+      let name = nama.value.trim();
+      let price = parseInt(harga.value,10);
+      let cat = kategori.value;
+      let desc = deskripsi.value.trim();
+      let img = lastImage;
+      let idx = editIndex.value;
+      // Validasi
+      if(!name || !cat) return showToast("Semua field wajib diisi!");
+      if(price < 0) return showToast("Harga tidak boleh negatif!");
+      if(idx === "") {
+        // Tambah produk
+        if(arr.some(p=>p.name.toLowerCase()===name.toLowerCase())) return showToast("Nama produk sudah ada!");
+        if(!img) return showToast("Gambar wajib diupload!");
+        arr.push({name, price, category:cat, desc, img});
+        saveProduk(arr);
+        showToast("Produk berhasil ditambah!");
+      } else {
+        // Edit produk
+        let index = parseInt(idx,10);
+        // Pastikan nama unik kecuali milik sendiri
+        if(arr.some((p,i)=>p.name.toLowerCase()===name.toLowerCase()&&i!==index)) return showToast("Nama produk sudah ada!");
+        if(!img) return showToast("Gambar wajib diupload!");
+        arr[index] = {name, price, category:cat, desc, img};
+        saveProduk(arr);
+        showToast("Produk diperbarui!");
+      }
+      renderProdukList();
+      resetForm();
+    };
+    // ===== RENDER PRODUK LIST =====
     function renderProdukList() {
       const list = document.getElementById('produkList');
       const data = loadProduk();
@@ -68,7 +279,6 @@
       }
       list.innerHTML = "<b>Daftar Produk:</b>";
       data.slice().reverse().forEach((p, i) => {
-        // index asli di storage
         const idx = data.length - 1 - i;
         list.innerHTML += `
           <div class="produk-item">
@@ -76,62 +286,46 @@
             <div class="produk-info">
               <div class="produk-title">${p.name}</div>
               <div class="produk-kat">${p.category}</div>
-              <div style="font-size:0.96rem;color:#555;">Rp${p.price.toLocaleString("id-ID")}</div>
+              <div class="produk-harga">Rp${p.price.toLocaleString("id-ID")}</div>
             </div>
-            <button class="del-btn" onclick="hapusProduk(${idx})">Hapus</button>
+            <button class="btn-edit" onclick="editProduk(${idx})">Edit</button>
+            <button class="btn-hapus" onclick="hapusProduk(${idx})">Hapus</button>
           </div>
         `;
       });
     }
-    function hapusProduk(idx) {
+    // ===== EDIT / HAPUS =====
+    window.editProduk = function(idx) {
+      const arr = loadProduk();
+      const p = arr[idx];
+      nama.value = p.name;
+      harga.value = p.price;
+      kategori.value = p.category;
+      deskripsi.value = p.desc;
+      imgPreview.src = p.img;
+      imgPreview.style.display = "block";
+      lastImage = p.img;
+      editIndex.value = idx;
+      document.getElementById("formTitle").textContent = "Edit Produk";
+      document.getElementById("submitBtn").textContent = "Update Produk";
+      gambar.required = false;
+      gambar.value = "";
+      window.scrollTo({top:0,behavior:'smooth'});
+    }
+    window.hapusProduk = function(idx) {
       if(!confirm("Yakin hapus produk ini?")) return;
       let data = loadProduk();
       data.splice(idx,1);
       saveProduk(data);
       renderProdukList();
-      alert("Produk dihapus!");
+      showToast("Produk dihapus!");
+      resetForm();
     }
-    // Preview gambar
-    const gambarInput = document.getElementById('gambar');
-    const imgPreview = document.getElementById('imgPreview');
-    gambarInput.onchange = function() {
-      const file = gambarInput.files[0];
-      if(file) {
-        const reader = new FileReader();
-        reader.onload = e => {
-          imgPreview.src = e.target.result;
-          imgPreview.style.display = "block";
-        };
-        reader.readAsDataURL(file);
-      } else {
-        imgPreview.style.display = "none";
-      }
+    // ===== INISIALISASI LOGIN/PANEL ======
+    window.onload = function() {
+      if(isLoggedIn()) showAdminPanel();
+      else showLogin();
     };
-    // Submit produk
-    document.getElementById('formProduk').onsubmit = function(e){
-      e.preventDefault();
-      const name = document.getElementById('nama').value.trim();
-      const price = parseInt(document.getElementById('harga').value,10);
-      const category = document.getElementById('kategori').value;
-      const desc = document.getElementById('deskripsi').value.trim();
-      const file = gambarInput.files[0];
-      if(!file) return alert("Pilih gambar produk.");
-      const reader = new FileReader();
-      reader.onload = function(evt){
-        const img = evt.target.result;
-        const produkBaru = {name, price, category, desc, img};
-        let arr = loadProduk();
-        arr.push(produkBaru);
-        saveProduk(arr);
-        alert("Produk berhasil ditambahkan!");
-        document.getElementById('formProduk').reset();
-        imgPreview.style.display = "none";
-        renderProdukList();
-      };
-      reader.readAsDataURL(file);
-    };
-    // Inisialisasi
-    renderProdukList();
   </script>
 </body>
 </html>
