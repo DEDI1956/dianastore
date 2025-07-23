@@ -7,18 +7,23 @@ const { sendStartMessage } = require('./start');
 const CLOUDFLARE_API_BASE_URL = 'https://api.cloudflare.com/client/v4';
 
 // --- Fungsi Helper ---
-const getCfHeaders = (apiToken) => ({
+const getCfHeaders = (apiToken, contentType = 'application/json') => ({
     'Authorization': `Bearer ${apiToken}`,
-    'Content-Type': 'application/javascript'
+    'Content-Type': contentType
 });
 
+const isValidWorkerName = (name) => {
+    const regex = /^[a-z0-9-]+$/;
+    return regex.test(name);
+};
+
 // --- Fungsi Menu ---
-const sendWorkerMenu = (bot, chatId, accountEmail) => {
+const sendWorkerMenu = (bot, chatId, accountIdentifier) => {
     const text = `\
 ━━━━━━━━━━━━━━━━━━
 ✅ *Login Worker Berhasil*
 
-👤 Akun: ${accountEmail}
+👤 Akun: ${accountIdentifier}
 
 Pilih aksi:
 1️⃣ Deploy Worker via Github
@@ -36,7 +41,6 @@ Pilih aksi:
     };
     bot.sendMessage(chatId, text, options);
 };
-
 
 // --- Logika Utama Handler ---
 module.exports = (bot, userState) => {
@@ -59,73 +63,92 @@ module.exports = (bot, userState) => {
                 case 'awaiting_worker_account_id':
                     state.accountId = text;
                     bot.sendMessage(chatId, 'Memvalidasi kredensial...');
-
-                    const response = await axios.get(`${CLOUDFLARE_API_BASE_URL}/accounts/${state.accountId}/workers/scripts`, {
-                        headers: { 'Authorization': `Bearer ${state.apiToken}` }
+                    // Validasi dengan mencoba mengambil daftar worker
+                    await axios.get(`${CLOUDFLARE_API_BASE_URL}/accounts/${state.accountId}/workers/scripts`, {
+                        headers: getCfHeaders(state.apiToken)
                     });
-
-                    // Asumsi berhasil jika tidak ada error, Cloudflare API tidak mengembalikan email di endpoint ini.
-                    // Kita akan gunakan Account ID untuk tampilan.
-                    const accountIdentifier = state.accountId;
-
-                    bot.sendMessage(chatId, `✅ Login Worker berhasil untuk Akun ID: ${accountIdentifier}`);
+                    bot.sendMessage(chatId, `✅ Login Worker berhasil untuk Akun ID: ${state.accountId}`);
                     state.step = 'worker_menu';
-                    sendWorkerMenu(bot, chatId, `ID ${accountIdentifier}`); // Menggunakan ID karena email tidak tersedia
+                    sendWorkerMenu(bot, chatId, `ID ${state.accountId}`);
                     break;
 
-                // --- Alur Deploy ---
+                // --- Alur Deploy Baru ---
+                case 'worker_deploy_name':
+                    if (!isValidWorkerName(text)) {
+                        bot.sendMessage(chatId, "❌ Nama Worker tidak valid. Gunakan huruf kecil, angka, dan dash `-` saja, tanpa spasi atau simbol lain. Silakan masukkan ulang:");
+                        return; // Tetap di step yang sama
+                    }
+                    state.workerName = text;
+                    state.step = 'worker_deploy_repo';
+                    bot.sendMessage(chatId, `✅ Nama Worker diterima: \`${state.workerName}\`\nSekarang, masukkan link repository GitHub untuk Worker yang ingin Anda deploy:`);
+                    break;
+
                 case 'worker_deploy_repo':
-                    const repoUrl = text;
-                    const repoName = path.basename(repoUrl, '.git');
+                    state.repoUrl = text;
+                    const repoName = path.basename(state.repoUrl, '.git');
                     const localRepoPath = path.join(__dirname, '..', 'temp_workers', repoName);
 
-                    bot.sendMessage(chatId, `Mencoba meng-clone repository dari ${repoUrl}...`);
+                    bot.sendMessage(chatId, `Mencoba meng-clone repository dari ${state.repoUrl}...`);
 
-                    exec(`git clone ${repoUrl} ${localRepoPath}`, async (error, stdout, stderr) => {
+                    // Hapus direktori lama jika ada
+                    if (fs.existsSync(localRepoPath)) {
+                        fs.rmSync(localRepoPath, { recursive: true, force: true });
+                    }
+
+                    exec(`git clone ${state.repoUrl} ${localRepoPath}`, async (error, stdout, stderr) => {
                         if (error) {
-                            bot.sendMessage(chatId, `❌ Gagal meng-clone repository: ${stderr}`);
-                            delete userState[chatId];
+                            bot.sendMessage(chatId, `❌ Gagal meng-clone repository: ${stderr}`, {
+                                reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke menu Worker', callback_data: 'worker_menu_loggedin' }]] }
+                            });
+                            delete state.step;
                             return;
                         }
 
-                        bot.sendMessage(chatId, '✅ Repository berhasil di-clone.');
+                        bot.sendMessage(chatId, '✅ Repository berhasil di-clone. Membaca file worker...');
 
-                        // Cari file .js utama (misal: index.js, worker.js)
                         const files = fs.readdirSync(localRepoPath);
-                        const jsFile = files.find(f => f.endsWith('.js') && (f === 'index.js' || f === 'worker.js'));
+                        const jsFile = files.find(f => f.endsWith('.js') && (f === 'index.js' || f === 'worker.js' || f === 'src/index.js'));
 
                         if (!jsFile) {
-                            bot.sendMessage(chatId, '❌ Tidak dapat menemukan file worker utama (index.js atau worker.js).');
-                            delete userState[chatId];
+                            bot.sendMessage(chatId, '❌ Tidak dapat menemukan file worker utama (index.js, worker.js, atau src/index.js).', {
+                                reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke menu Worker', callback_data: 'worker_menu_loggedin' }]] }
+                            });
+                            fs.rmSync(localRepoPath, { recursive: true, force: true });
+                            delete state.step;
                             return;
                         }
 
                         const scriptContent = fs.readFileSync(path.join(localRepoPath, jsFile), 'utf-8');
-                        const workerName = repoName; // Gunakan nama repo sebagai nama worker
+
+                        bot.sendMessage(chatId, `Mendeploy worker dengan nama \`${state.workerName}\`...`);
 
                         try {
                             await axios.put(
-                                `${CLOUDFLARE_API_BASE_URL}/accounts/${state.accountId}/workers/scripts/${workerName}`,
+                                `${CLOUDFLARE_API_BASE_URL}/accounts/${state.accountId}/workers/scripts/${state.workerName}`,
                                 scriptContent,
-                                { headers: getCfHeaders(state.apiToken) }
+                                { headers: getCfHeaders(state.apiToken, 'application/javascript') }
                             );
-
-                            const workerUrl = `https://${workerName}.${(await axios.get(`${CLOUDFLARE_API_BASE_URL}/accounts/${state.accountId}/workers/subdomain`, { headers: { 'Authorization': `Bearer ${state.apiToken}` } })).data.result.subdomain}.workers.dev`;
 
                             const successText = `\
 ━━━━━━━━━━━━━━━━━━
 ✅ *Worker Berhasil Dideploy*
 
-👷 Worker: \`${workerName}\`
-🔗 URL: ${workerUrl}
+📄 Nama Worker: \`${state.workerName}\`
+🔗 Repository: \`${state.repoUrl}\`
+✅ Status: Sukses
 ━━━━━━━━━━━━━━━━━━`;
-                            bot.sendMessage(chatId, successText, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke Fitur Worker', callback_data: 'worker_menu_loggedin' }]] } });
+                            bot.sendMessage(chatId, successText, {
+                                parse_mode: 'Markdown',
+                                reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke menu Worker', callback_data: 'worker_menu_loggedin' }]] }
+                            });
 
-                        } catch(deployError) {
-                             bot.sendMessage(chatId, `❌ Gagal mendeploy worker: ${deployError.response.data.errors[0].message}`);
+                        } catch (deployError) {
+                            const errorMessage = deployError.response?.data?.errors?.[0]?.message || 'Terjadi kesalahan tidak diketahui.';
+                            bot.sendMessage(chatId, `❌ Gagal mendeploy worker: ${errorMessage}`, {
+                                reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke menu Worker', callback_data: 'worker_menu_loggedin' }]] }
+                            });
                         } finally {
-                            // Hapus repo lokal
-                            fs.rmdirSync(localRepoPath, { recursive: true });
+                            fs.rmSync(localRepoPath, { recursive: true, force: true });
                             const preservedState = { apiToken: state.apiToken, accountId: state.accountId };
                             userState[chatId] = { ...preservedState, step: 'worker_menu' };
                         }
@@ -133,10 +156,11 @@ module.exports = (bot, userState) => {
                     break;
             }
         } catch (error) {
-            console.error(error);
-            bot.sendMessage(chatId, '❌ Terjadi kesalahan. Pastikan kredensial dan input Anda benar.');
+            const errorMessage = error.response?.data?.errors?.[0]?.message || 'Terjadi kesalahan tidak diketahui.';
+            bot.sendMessage(chatId, `❌ Terjadi kesalahan: ${errorMessage}`, {
+                reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke Menu Utama', callback_data: 'main_menu' }]] }
+            });
             delete userState[chatId];
-            sendStartMessage(bot, chatId);
         }
     });
 };
@@ -152,7 +176,7 @@ module.exports.handleCallback = async (bot, userState, callbackQuery) => {
 
     const ensureLogin = (nextCallback) => {
         if (state.apiToken && state.accountId) {
-             module.exports.handleCallback(bot, userState, { ...callbackQuery, data: nextCallback });
+            module.exports.handleCallback(bot, userState, { ...callbackQuery, data: nextCallback });
         } else {
             userState[chatId] = { step: 'awaiting_worker_token', nextCallback };
             bot.sendMessage(chatId, 'Untuk mengakses fitur Worker, silakan masukkan API Token khusus Worker Anda:');
@@ -160,21 +184,20 @@ module.exports.handleCallback = async (bot, userState, callbackQuery) => {
     };
 
     try {
-        switch(data) {
+        switch (data) {
             case 'worker_menu':
                 ensureLogin('worker_menu_loggedin');
                 break;
             case 'worker_menu_loggedin':
-                 // Perlu mengambil ulang info akun karena bisa jadi sesi baru
-                 sendWorkerMenu(bot, chatId, `ID ${state.accountId}`);
-                 break;
+                sendWorkerMenu(bot, chatId, `ID ${state.accountId}`);
+                break;
 
             case 'worker_deploy_github':
                 ensureLogin('worker_deploy_github_loggedin');
                 break;
             case 'worker_deploy_github_loggedin':
-                userState[chatId] = { ...state, step: 'worker_deploy_repo' };
-                bot.sendMessage(chatId, 'Masukkan link repository GitHub untuk worker yang ingin Anda deploy:');
+                userState[chatId] = { ...state, step: 'worker_deploy_name' };
+                bot.sendMessage(chatId, "Masukkan nama Worker Anda (hanya huruf kecil, angka, dan tanda dash `-`. Tidak boleh ada spasi atau simbol lain):");
                 break;
 
             case 'worker_list':
@@ -182,7 +205,7 @@ module.exports.handleCallback = async (bot, userState, callbackQuery) => {
                 break;
             case 'worker_list_loggedin':
                 const res = await axios.get(`${CLOUDFLARE_API_BASE_URL}/accounts/${state.accountId}/workers/scripts`, {
-                    headers: { 'Authorization': `Bearer ${state.apiToken}` }
+                    headers: getCfHeaders(state.apiToken)
                 });
                 const workers = res.data.result;
 
@@ -194,8 +217,7 @@ module.exports.handleCallback = async (bot, userState, callbackQuery) => {
                 if (workers.length === 0) {
                     listText += 'Tidak ada worker yang ditemukan.';
                 } else {
-                    // Ambil subdomain untuk membangun URL
-                    const subdomainRes = await axios.get(`${CLOUDFLARE_API_BASE_URL}/accounts/${state.accountId}/workers/subdomain`, { headers: { 'Authorization': `Bearer ${state.apiToken}` } });
+                    const subdomainRes = await axios.get(`${CLOUDFLARE_API_BASE_URL}/accounts/${state.accountId}/workers/subdomain`, { headers: getCfHeaders(state.apiToken) });
                     const subdomain = subdomainRes.data.result.subdomain;
 
                     workers.forEach((worker, index) => {
@@ -205,13 +227,17 @@ module.exports.handleCallback = async (bot, userState, callbackQuery) => {
                 }
                 listText += '━━━━━━━━━━━━━━━━━━';
 
-                bot.sendMessage(chatId, listText, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke Fitur Worker', callback_data: 'worker_menu_loggedin' }]] } });
+                bot.sendMessage(chatId, listText, {
+                    parse_mode: 'Markdown',
+                    reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke menu Worker', callback_data: 'worker_menu_loggedin' }]] }
+                });
                 break;
         }
     } catch (error) {
-        console.error(error.response ? error.response.data : error.message);
-        bot.sendMessage(chatId, '❌ Terjadi kesalahan. Kembali ke menu utama.');
+        const errorMessage = error.response?.data?.errors?.[0]?.message || 'Terjadi kesalahan tidak diketahui.';
+        bot.sendMessage(chatId, `❌ Terjadi kesalahan: ${errorMessage}. Kembali ke menu utama.`, {
+             reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke Menu Utama', callback_data: 'main_menu' }]] }
+        });
         delete userState[chatId];
-        sendStartMessage(bot, chatId);
     }
 };
