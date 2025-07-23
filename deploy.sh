@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Skrip sederhana untuk deployment via webhook
+# Skrip andal untuk deployment via webhook
 # Pastikan skrip ini memiliki izin eksekusi: chmod +x deploy.sh
 
 # Arahkan ke direktori proyek
@@ -10,9 +10,16 @@ cd "$PROJECT_DIR" || exit
 
 echo "Navigated to $PROJECT_DIR"
 
+# Simpan perubahan lokal yang belum di-commit (jika ada)
+echo "Stashing local changes..."
+git stash
+
 # Ambil perubahan terbaru dari branch main
 echo "Pulling latest changes from origin main..."
 git pull origin main
+
+# Kembalikan perubahan yang di-stash (jika perlu, atau abaikan jika tidak ingin)
+# git stash pop
 
 # Install dependencies jika ada perubahan di package.json
 echo "Installing/updating npm dependencies..."
@@ -29,10 +36,6 @@ if [ $? -eq 0 ]; then
   echo "Process $PROCESS_NAME restarted."
 else
   echo "Process $PROCESS_NAME not found. Starting it..."
-  # Jika menggunakan webhook, Anda akan menjalankan webhook.js
-  # Jika polling, Anda akan menjalankan index.js
-  # Anda bisa menggunakan variabel env untuk mengontrol ini, atau hardcode.
-  # Contoh: pm2 start webhook.js --name $PROCESS_NAME
   pm2 start ecosystem.config.js
   echo "Process started via ecosystem.config.js."
 fi
