@@ -14,6 +14,9 @@ Pilih fitur:
                 [
                     { text: '📡 DNS', callback_data: 'dns_menu' },
                     { text: '⚙️ Deploy Worker', callback_data: 'worker_menu' }
+                ],
+                [
+                    { text: '🚪 Logout', callback_data: 'logout' }
                 ]
             ]
         }
@@ -22,8 +25,12 @@ Pilih fitur:
     bot.sendMessage(chatId, text, options);
 };
 
-module.exports = (bot) => {
+module.exports = (bot, userState) => {
     bot.onText(/\/start/, (msg) => {
+        // Hapus state lama saat /start dipanggil
+        if(userState[msg.chat.id]) {
+            delete userState[msg.chat.id];
+        }
         sendStartMessage(bot, msg.chat.id);
     });
 };
