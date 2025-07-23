@@ -1,42 +1,44 @@
-const axios = require('axios');
-const { exec } = require('child_process');
+const { exec, execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const FormData = require('form-data');
 const { sendStartMessage } = require('./start');
+const axios = require('axios'); // Masih digunakan untuk list workers
 
 const CLOUDFLARE_API_BASE_URL = 'https://api.cloudflare.com/client/v4';
 
 // --- Fungsi Helper ---
-const getCfHeaders = (apiToken, form = null) => {
-    const headers = {
-        'Authorization': `Bearer ${apiToken}`
-    };
-    if (form) {
-        return { ...headers, ...form.getHeaders() };
-    }
-    return { ...headers, 'Content-Type': 'application/json' };
-};
+const getCfHeaders = (apiToken) => ({
+    'Authorization': `Bearer ${apiToken}`,
+    'Content-Type': 'application/json'
+});
 
 const isValidWorkerName = (name) => {
     const regex = /^[a-z0-9-]+$/;
     return regex.test(name);
 };
 
-/**
- * Menganalisis konten skrip untuk mendeteksi apakah itu ES Module.
- * @param {string} scriptContent Konten file worker.
- * @returns {'module' | 'service'} Tipe worker.
- */
-const detectWorkerType = (scriptContent) => {
-    // Regex untuk mendeteksi 'import' atau 'export' di awal baris (setelah spasi/tab)
-    const moduleRegex = /^(?:\s*|.*\s+)(?:import|export)\s+/m;
-    if (moduleRegex.test(scriptContent)) {
-        return 'module';
-    }
-    return 'service';
-};
+let wranglerChecked = false;
+const checkAndInstallWrangler = (bot, chatId) => {
+    if (wranglerChecked) return true;
 
+    try {
+        execSync('wrangler --version');
+        bot.sendMessage(chatId, '✅ `wrangler` sudah terpasang.');
+        wranglerChecked = true;
+        return true;
+    } catch (error) {
+        bot.sendMessage(chatId, '`wrangler` tidak ditemukan. Memasang `wrangler` secara global, ini mungkin memakan waktu beberapa saat...');
+        try {
+            execSync('npm install -g wrangler');
+            bot.sendMessage(chatId, '✅ `wrangler` berhasil dipasang.');
+            wranglerChecked = true;
+            return true;
+        } catch (installError) {
+            bot.sendMessage(chatId, `❌ Gagal memasang \`wrangler\`: ${installError.message}`);
+            return false;
+        }
+    }
+};
 
 // --- Fungsi Menu ---
 const sendWorkerMenu = (bot, chatId, accountIdentifier) => {
@@ -72,19 +74,19 @@ module.exports = (bot, userState) => {
         if (!userState[chatId] || !userState[chatId].step) return;
 
         const state = userState[chatId];
+        const localRepoPath = state.repoUrl ? path.join(__dirname, '..', 'temp_workers', path.basename(state.repoUrl, '.git')) : null;
 
         try {
             switch (state.step) {
-                // --- Alur Login Worker ---
                 case 'awaiting_worker_token':
-                    state.apiToken = text;
+                     state.apiToken = text;
                     state.step = 'awaiting_worker_account_id';
                     bot.sendMessage(chatId, 'API Token diterima. Sekarang masukkan Account ID Cloudflare Anda:');
                     break;
                 case 'awaiting_worker_account_id':
                     state.accountId = text;
                     bot.sendMessage(chatId, 'Memvalidasi kredensial...');
-                    await axios.get(`${CLOUDFLARE_API_BASE_URL}/accounts/${state.accountId}/workers/scripts`, {
+                     await axios.get(`${CLOUDFLARE_API_BASE_URL}/accounts/${state.accountId}/workers/scripts`, {
                         headers: getCfHeaders(state.apiToken)
                     });
                     bot.sendMessage(chatId, `✅ Login Worker berhasil untuk Akun ID: ${state.accountId}`);
@@ -92,109 +94,70 @@ module.exports = (bot, userState) => {
                     sendWorkerMenu(bot, chatId, `ID ${state.accountId}`);
                     break;
 
-                // --- Alur Deploy Baru ---
                 case 'worker_deploy_name':
                     if (!isValidWorkerName(text)) {
-                        bot.sendMessage(chatId, "❌ Nama Worker tidak valid. Gunakan huruf kecil, angka, dan dash `-` saja, tanpa spasi atau simbol lain. Silakan masukkan ulang:");
+                        bot.sendMessage(chatId, "❌ Nama Worker tidak valid. Gunakan huruf kecil, angka, dan dash `-` saja. Silakan masukkan ulang:");
                         return;
                     }
                     state.workerName = text;
                     state.step = 'worker_deploy_repo';
-                    bot.sendMessage(chatId, `✅ Nama Worker diterima: \`${state.workerName}\`\nSekarang, masukkan link repository GitHub untuk Worker yang ingin Anda deploy:`);
+                    bot.sendMessage(chatId, `✅ Nama Worker diterima: \`${state.workerName}\`\nSekarang, masukkan link repository GitHub:`);
                     break;
 
                 case 'worker_deploy_repo':
                     state.repoUrl = text;
                     const repoName = path.basename(state.repoUrl, '.git');
-                    const localRepoPath = path.join(__dirname, '..', 'temp_workers', repoName);
+                    const newLocalRepoPath = path.join(__dirname, '..', 'temp_workers', repoName);
 
-                    bot.sendMessage(chatId, `Mencoba meng-clone repository dari ${state.repoUrl}...`);
-
-                    if (fs.existsSync(localRepoPath)) {
-                        fs.rmSync(localRepoPath, { recursive: true, force: true });
+                    if (fs.existsSync(newLocalRepoPath)) {
+                        fs.rmSync(newLocalRepoPath, { recursive: true, force: true });
                     }
 
-                    exec(`git clone ${state.repoUrl} ${localRepoPath}`, async (error, stdout, stderr) => {
+                    bot.sendMessage(chatId, `Mencoba meng-clone repository dari ${state.repoUrl}...`);
+                    exec(`git clone ${state.repoUrl} ${newLocalRepoPath}`, (error) => {
                         if (error) {
-                            bot.sendMessage(chatId, `❌ Gagal meng-clone repository: ${stderr}`, {
-                                reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke menu Worker', callback_data: 'worker_menu_loggedin' }]] }
-                            });
-                            delete state.step;
-                            return;
+                             bot.sendMessage(chatId, `❌ Gagal meng-clone repository: ${error.message}`);
+                             delete userState[chatId].step;
+                             return;
                         }
 
-                        bot.sendMessage(chatId, '✅ Repository berhasil di-clone. Menganalisa file worker...');
+                        bot.sendMessage(chatId, '✅ Repo berhasil di-clone. Mengecek `wrangler.toml`...');
 
-                        const files = fs.readdirSync(localRepoPath);
-                        const jsFileName = files.find(f => f.endsWith('.js') && (f === 'index.js' || f === 'worker.js' || f === 'src/index.js'));
-
-                        if (!jsFileName) {
-                            bot.sendMessage(chatId, '❌ Tidak dapat menemukan file worker utama (index.js, worker.js, atau src/index.js).', {
-                                reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke menu Worker', callback_data: 'worker_menu_loggedin' }]] }
-                            });
-                            fs.rmSync(localRepoPath, { recursive: true, force: true });
-                            delete state.step;
-                            return;
-                        }
-
-                        const scriptContent = fs.readFileSync(path.join(localRepoPath, jsFileName), 'utf-8');
-                        const workerType = detectWorkerType(scriptContent);
-
-                        bot.sendMessage(chatId, `Worker terdeteksi sebagai tipe: *${workerType}*. Mendeploy dengan nama \`${state.workerName}\`...`, {parse_mode: 'Markdown'});
-
-                        const form = new FormData();
-                        const metadata = {
-                            main_module: workerType === 'module' ? jsFileName : undefined,
-                            body_part: workerType === 'service' ? 'script' : undefined,
-                        };
-
-                        form.append('metadata', JSON.stringify(metadata));
-
-                        if (workerType === 'module') {
-                            form.append(jsFileName, scriptContent, { filename: jsFileName, contentType: 'application/javascript+module' });
+                        const wranglerTomlPath = path.join(newLocalRepoPath, 'wrangler.toml');
+                        if (!fs.existsSync(wranglerTomlPath)) {
+                            bot.sendMessage(chatId, '`wrangler.toml` tidak ditemukan. Membuat file baru...');
+                            const mainScript = ['index.js', 'worker.js', 'src/index.js'].find(f => fs.existsSync(path.join(newLocalRepoPath, f))) || 'index.js';
+                            const wranglerConfig = `name = "${state.workerName}"\nmain = "${mainScript}"\naccount_id = "${state.accountId}"\nworkers_dev = true\n`;
+                            fs.writeFileSync(wranglerTomlPath, wranglerConfig);
+                             bot.sendMessage(chatId, `✅ \`wrangler.toml\` berhasil dibuat.`);
                         } else {
-                            form.append('script', scriptContent, { contentType: 'application/javascript' });
+                            bot.sendMessage(chatId, '✅ `wrangler.toml` sudah ada.');
                         }
 
-                        try {
-                            await axios.put(
-                                `${CLOUDFLARE_API_BASE_URL}/accounts/${state.accountId}/workers/scripts/${state.workerName}`,
-                                form,
-                                { headers: getCfHeaders(state.apiToken, form) }
-                            );
+                        // Untuk sekarang, kita skip deteksi ENV otomatis dan langsung deploy
+                        // Implementasi ENV akan ditambahkan jika diperlukan
 
-                            const successText = `\
-━━━━━━━━━━━━━━━━━━
-✅ *Worker Berhasil Dideploy*
+                        bot.sendMessage(chatId, 'Mempersiapkan untuk deploy dengan `wrangler`...');
 
-📄 Nama Worker: \`${state.workerName}\`
-🔧 Tipe: ${workerType}
-🔗 Repository: \`${state.repoUrl}\`
-✅ Status: Sukses
-━━━━━━━━━━━━━━━━━━`;
-                            bot.sendMessage(chatId, successText, {
-                                parse_mode: 'Markdown',
-                                reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke menu Worker', callback_data: 'worker_menu_loggedin' }]] }
-                            });
+                        const deployCommand = `cd ${newLocalRepoPath} && CLOUDFLARE_API_TOKEN=${state.apiToken} wrangler deploy`;
 
-                        } catch (deployError) {
-                            const errorMessage = deployError.response?.data?.errors?.[0]?.message || 'Terjadi kesalahan tidak diketahui.';
-                            bot.sendMessage(chatId, `❌ Gagal mendeploy worker: ${errorMessage}`, {
-                                reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke menu Worker', callback_data: 'worker_menu_loggedin' }]] }
-                            });
-                        } finally {
-                            fs.rmSync(localRepoPath, { recursive: true, force: true });
-                            const preservedState = { apiToken: state.apiToken, accountId: state.accountId };
-                            userState[chatId] = { ...preservedState, step: 'worker_menu' };
-                        }
+                        exec(deployCommand, (deployError, stdout, stderr) => {
+                             if (deployError) {
+                                bot.sendMessage(chatId, `❌ Deploy gagal:\n\`\`\`\n${stderr}\n\`\`\``, { parse_mode: 'Markdown' });
+                            } else {
+                                bot.sendMessage(chatId, `✅ **Deploy Berhasil**\n\`\`\`\n${stdout}\n\`\`\``, { parse_mode: 'Markdown' });
+                            }
+                             fs.rmSync(newLocalRepoPath, { recursive: true, force: true });
+                             const preservedState = { apiToken: state.apiToken, accountId: state.accountId };
+                             userState[chatId] = { ...preservedState, step: 'worker_menu' };
+                             sendWorkerMenu(bot, chatId, `ID ${state.accountId}`);
+                        });
                     });
                     break;
             }
         } catch (error) {
-            const errorMessage = error.response?.data?.errors?.[0]?.message || 'Terjadi kesalahan tidak diketahui.';
-            bot.sendMessage(chatId, `❌ Terjadi kesalahan: ${errorMessage}`, {
-                reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke Menu Utama', callback_data: 'main_menu' }]] }
-            });
+            const errorMessage = error.response?.data?.errors?.[0]?.message || error.message || 'Terjadi kesalahan tidak diketahui.';
+            bot.sendMessage(chatId, `❌ Terjadi kesalahan: ${errorMessage}`);
             delete userState[chatId];
         }
     });
@@ -214,7 +177,7 @@ module.exports.handleCallback = async (bot, userState, callbackQuery) => {
             module.exports.handleCallback(bot, userState, { ...callbackQuery, data: nextCallback });
         } else {
             userState[chatId] = { step: 'awaiting_worker_token', nextCallback };
-            bot.sendMessage(chatId, 'Untuk mengakses fitur Worker, silakan masukkan API Token khusus Worker Anda:');
+            bot.sendMessage(chatId, 'Silakan masukkan API Token Cloudflare Anda:');
         }
     };
 
@@ -231,48 +194,39 @@ module.exports.handleCallback = async (bot, userState, callbackQuery) => {
                 ensureLogin('worker_deploy_github_loggedin');
                 break;
             case 'worker_deploy_github_loggedin':
+                if (!checkAndInstallWrangler(bot, chatId)) {
+                    sendStartMessage(bot, chatId);
+                    return;
+                }
                 userState[chatId] = { ...state, step: 'worker_deploy_name' };
-                bot.sendMessage(chatId, "Masukkan nama Worker Anda (hanya huruf kecil, angka, dan tanda dash `-`. Tidak boleh ada spasi atau simbol lain):");
+                bot.sendMessage(chatId, "Masukkan nama Worker Anda (hanya huruf kecil, angka, dan dash `-`):");
                 break;
 
             case 'worker_list':
-                ensureLogin('worker_list_loggedin');
+                 ensureLogin('worker_list_loggedin');
                 break;
             case 'worker_list_loggedin':
-                const res = await axios.get(`${CLOUDFLARE_API_BASE_URL}/accounts/${state.accountId}/workers/scripts`, {
+                 const res = await axios.get(`${CLOUDFLARE_API_BASE_URL}/accounts/${state.accountId}/workers/scripts`, {
                     headers: getCfHeaders(state.apiToken)
                 });
+                // ... (sisa kode list worker sama seperti sebelumnya)
                 const workers = res.data.result;
-
-                let listText = `\
-━━━━━━━━━━━━━━━━━━
-👷 *Daftar Worker Anda*
-\n`;
-
+                let listText = "👷 *Daftar Worker Anda*\n\n";
                 if (workers.length === 0) {
                     listText += 'Tidak ada worker yang ditemukan.';
                 } else {
-                    const subdomainRes = await axios.get(`${CLOUDFLARE_API_BASE_URL}/accounts/${state.accountId}/workers/subdomain`, { headers: getCfHeaders(state.apiToken) });
+                     const subdomainRes = await axios.get(`${CLOUDFLARE_API_BASE_URL}/accounts/${state.accountId}/workers/subdomain`, { headers: getCfHeaders(state.apiToken) });
                     const subdomain = subdomainRes.data.result.subdomain;
-
                     workers.forEach((worker, index) => {
-                        const workerUrl = `https://${worker.id}.${subdomain}.workers.dev`;
-                        listText += `${index + 1}. *${worker.id}*\n   - URL: ${workerUrl}\n`;
+                        listText += `${index + 1}. *${worker.id}*\n   - URL: https://${worker.id}.${subdomain}.workers.dev\n`;
                     });
                 }
-                listText += '━━━━━━━━━━━━━━━━━━';
-
-                bot.sendMessage(chatId, listText, {
-                    parse_mode: 'Markdown',
-                    reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke menu Worker', callback_data: 'worker_menu_loggedin' }]] }
-                });
+                 bot.sendMessage(chatId, listText, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali', callback_data: 'worker_menu_loggedin' }]] } });
                 break;
         }
     } catch (error) {
         const errorMessage = error.response?.data?.errors?.[0]?.message || 'Terjadi kesalahan tidak diketahui.';
-        bot.sendMessage(chatId, `❌ Terjadi kesalahan: ${errorMessage}. Kembali ke menu utama.`, {
-             reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke Menu Utama', callback_data: 'main_menu' }]] }
-        });
+        bot.sendMessage(chatId, `❌ Terjadi kesalahan: ${errorMessage}.`);
         delete userState[chatId];
     }
 };
