@@ -1,5 +1,4 @@
 const axios = require('axios');
-const { ensureLoggedIn } = require('./auth');
 
 const CLOUDFLARE_API_BASE_URL = 'https://api.cloudflare.com/client/v4';
 
@@ -8,14 +7,9 @@ const getCfHeaders = (apiToken) => ({
     'Content-Type': 'application/json'
 });
 
-const sendDnsMenu = (bot, chatId, logger) => {
-    logger.info(`Sending DNS menu to ${chatId}`);
-    const text = `\
-━━━━━━━━━━━━━━━━━━
-📡 *Menu DNS*
-Pilih salah satu opsi:
-━━━━━━━━━━━━━━━━━━`;
-    const options = {
+const sendDnsMenu = (bot, chatId) => {
+    const text = `━━━━━━━━━━━━━━━━━━\n📡 *Menu DNS*\nPilih salah satu opsi:\n━━━━━━━━━━━━━━━━━━`;
+    bot.sendMessage(chatId, text, {
         parse_mode: 'Markdown',
         reply_markup: {
             inline_keyboard: [
@@ -25,28 +19,44 @@ Pilih salah satu opsi:
                 [{ text: '🔙 Kembali', callback_data: 'main_menu' }, { text: '🚪 Logout', callback_data: 'logout' }]
             ]
         }
-    };
-    bot.sendMessage(chatId, text, options);
+    });
 };
 
 const register = (bot, userState, logger) => {
-    // Message handler untuk input DNS (seperti subdomain, IP, dll.)
     bot.on('message', async (msg) => {
         const chatId = msg.chat.id;
         const text = msg.text.trim();
         const state = userState[chatId];
 
-        if (!state || !state.step || !state.step.startsWith('dns_')) return;
+        if (!state || !state.step || !state.step !== 'awaiting_dns_token') return;
 
-        logger.info(`[DNS] ChatID: ${chatId}, Step: ${state.step}, Input: ${text}`);
+        logger.info(`[DNS Auth] ChatID: ${chatId}, Step: ${state.step}`);
+        if (state.step === 'awaiting_dns_token') {
+            bot.sendMessage(chatId, 'Memverifikasi token...');
+            try {
+                // Verifikasi token dengan mencoba mengambil data user
+                const verifyResponse = await axios.get(`${CLOUDFLARE_API_BASE_URL}/user`, { headers: getCfHeaders(text) });
 
-        // ... (Logika untuk menangani input DNS spesifik seperti subdomain, IP, dll.)
-        // Contoh:
-        if (state.step === 'dns_await_subdomain') {
-            state.subdomain = text;
-            state.step = 'dns_await_ip';
-            bot.sendMessage(chatId, 'Masukkan IP Address:');
+                state.apiToken = text;
+                state.accountId = verifyResponse.data.result.id; // Contoh saja, mungkin perlu disesuaikan
+                delete state.step;
+
+                bot.sendMessage(chatId, `✅ Login berhasil untuk akun ${verifyResponse.data.result.email}!`);
+
+                // Panggil kembali handler callback yang asli
+                if (state.nextCallback) {
+                    const originalCallback = state.nextCallback;
+                    delete state.nextCallback;
+                    handle(bot, userState, originalCallback, logger);
+                } else {
+                    sendDnsMenu(bot, chatId);
+                }
+            } catch (error) {
+                logger.error(`[DNS Auth] Invalid token for ${chatId}: ${error.message}`);
+                bot.sendMessage(chatId, '❌ Token tidak valid. Silakan coba lagi.');
+            }
         }
+        // ... logika untuk step DNS lainnya ...
     });
 };
 
@@ -54,42 +64,39 @@ const handle = (bot, userState, callbackQuery, logger) => {
     const { data, message } = callbackQuery;
     const chatId = message.chat.id;
 
-    const action = () => {
-        // Fungsi ini akan dijalankan setelah login berhasil
-        const state = userState[chatId];
-        bot.answerCallbackQuery(callbackQuery.id).catch(err => logger.error(`answerCallbackQuery failed: ${err.stack}`));
+    // Jawab query secepatnya
+    bot.answerCallbackQuery(callbackQuery.id).catch(err => logger.error(`[DNS] answerCallbackQuery failed: ${err.stack}`));
 
-        // Logika untuk setiap aksi DNS
-        switch (data) {
-            case 'dns_menu':
-                sendDnsMenu(bot, chatId, logger);
-                break;
+    const state = userState[chatId] || {};
 
-            case 'dns_list_a':
-            case 'dns_list_cname':
-                const type = data.includes('_a') ? 'A' : 'CNAME';
-                bot.sendMessage(chatId, `⏳ Mengambil daftar ${type} record...`);
-                axios.get(`${CLOUDFLARE_API_BASE_URL}/zones/${state.zoneId}/dns_records?type=${type}`, { headers: getCfHeaders(state.apiToken) })
-                    .then(response => {
-                        const records = response.data.result;
-                        let listText = `📋 *Daftar ${type} Record*\n\n`;
-                        if (records.length === 0) listText += 'Tidak ada record ditemukan.';
-                        else records.forEach((r, i) => { listText += `${i + 1}. \`${r.name}\` → \`${r.content}\`\n`; });
-                        bot.sendMessage(chatId, listText, { parse_mode: 'Markdown' });
-                    })
-                    .catch(err => {
-                        logger.error(`[DNS List] Error: ${err.stack}`);
-                        bot.sendMessage(chatId, '❌ Gagal mengambil data.');
-                    });
-                break;
+    // Cek login
+    if (!state.apiToken || !state.accountId) {
+        logger.info(`[DNS] Unauthenticated user ${chatId} trying to access ${data}.`);
+        userState[chatId] = {
+            step: 'awaiting_dns_token',
+            nextCallback: callbackQuery // Simpan seluruh callback query
+        };
+        bot.sendMessage(chatId, 'Anda harus login untuk menggunakan fitur ini. Silakan masukkan API Token Cloudflare Anda:');
+        return;
+    }
 
-            // ... (Tambahkan case untuk set dan delete di sini)
-        }
-    };
+    // Jika sudah login, lanjutkan
+    logger.info(`[DNS] Authenticated user ${chatId} accessing ${data}.`);
 
-    // Panggil ensureLoggedIn, berikan 'dns' sebagai izin yang dibutuhkan
-    // dan fungsi 'action' sebagai apa yang harus dilakukan setelah login.
-    ensureLoggedIn(bot, userState, chatId, 'dns', action);
+    // Logika untuk setiap aksi DNS
+    switch (data) {
+        case 'dns_menu':
+            sendDnsMenu(bot, chatId);
+            break;
+
+        // ... (implementasi untuk list, set, delete, dll.)
+        case 'dns_list_a':
+            bot.sendMessage(chatId, 'Fitur "List A Record" sedang dalam pengembangan.');
+            break;
+        default:
+            bot.sendMessage(chatId, 'Fitur belum diimplementasikan.');
+            break;
+    }
 };
 
 module.exports = {

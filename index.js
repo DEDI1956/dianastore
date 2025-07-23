@@ -5,43 +5,27 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('./utils/logger');
 
-// --- Konfigurasi Dasar ---
 const token = process.env.TELEGRAM_TOKEN || config.telegramToken;
-const botMode = process.env.BOT_MODE || 'polling'; // 'polling' atau 'webhook'
-const webhookUrl = process.env.WEBHOOK_URL; // e.g., https://yourdomain.com/bot
+const bot = new TelegramBot(token, { polling: true });
 
-// Pastikan direktori temp untuk clone repo ada
-const tempDir = path.join(__dirname, 'temp_workers');
-if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir);
-}
+logger.info('Bot berjalan dalam mode POLLING.');
 
-// --- Inisialisasi Bot ---
-let bot;
-if (botMode === 'webhook') {
-    if (!webhookUrl) {
-        logger.error("WEBHOOK_URL tidak diatur di environment variables untuk mode webhook.");
-        process.exit(1);
-    }
-    bot = new TelegramBot(token);
-    bot.setWebHook(`${webhookUrl}/${token}`);
-    logger.info('Bot berjalan dalam mode WEBHOOK.');
-} else {
-    bot = new TelegramBot(token, { polling: true });
-    logger.info('Bot berjalan dalam mode POLLING.');
-}
-
-// --- State & Handlers ---
 const userState = {};
 const handlers = {};
 const handlersPath = path.join(__dirname, 'handlers');
 
+// Muat semua handler dan daftarkan message listener mereka
 fs.readdirSync(handlersPath).forEach(file => {
     if (file.endsWith('.js')) {
         try {
             const handlerName = path.basename(file, '.js');
-            handlers[handlerName] = require(path.join(handlersPath, file));
-            handlers[handlerName].register(bot, userState, logger);
+            const handlerModule = require(path.join(handlersPath, file));
+            // Setiap handler sekarang bertanggung jawab atas 'on.message' nya sendiri
+            if (typeof handlerModule.register === 'function') {
+                handlerModule.register(bot, userState, logger);
+            }
+            // Simpan modul untuk dipanggil oleh callback handler
+            handlers[handlerName] = handlerModule;
             logger.info(`Handler '${handlerName}' berhasil dimuat.`);
         } catch (error) {
             logger.error(`Gagal memuat handler ${file}: ${error.stack}`);
@@ -49,25 +33,17 @@ fs.readdirSync(handlersPath).forEach(file => {
     }
 });
 
-// --- Router Callback Query Utama ---
+// Router Callback Query Utama
 bot.on('callback_query', (callbackQuery) => {
     const { data, message } = callbackQuery;
     const chatId = message.chat.id;
     logger.info(`[Callback] ChatID: ${chatId}, Data: ${data}`);
 
-    // Bersihkan state langkah (step) saat kembali ke menu, tapi pertahankan kredensial.
-    if (data === 'main_menu' || data === 'dns_menu' || data === 'worker_menu') {
-        if (userState[chatId]) {
-            const { apiToken, accountId, zoneId } = userState[chatId];
-            userState[chatId] = { apiToken, accountId, zoneId }; // Reset ke kredensial dasar
-        }
-    }
-
-    const [handlerName, ...args] = data.split('_');
+    const handlerName = data.split('_')[0]; // e.g., 'dns' from 'dns_menu'
 
     if (handlers[handlerName] && typeof handlers[handlerName].handle === 'function') {
         handlers[handlerName].handle(bot, userState, callbackQuery, logger);
-    } else if (handlerName === 'logout') {
+    } else if (data === 'logout') {
         delete userState[chatId];
         bot.answerCallbackQuery(callbackQuery.id, { text: '✅ Kamu berhasil logout.' });
         bot.editMessageText('Anda telah logout. Ketik /start untuk memulai lagi.', {
@@ -76,15 +52,12 @@ bot.on('callback_query', (callbackQuery) => {
             reply_markup: null
         });
         logger.info(`User ${chatId} logged out.`);
-    } else if (handlerName === 'main') { // untuk 'main_menu'
-         handlers['start'].handle(bot, userState, callbackQuery, logger);
+    } else if (data === 'main_menu') {
+        handlers['start'].handle(bot, userState, callbackQuery, logger);
     } else {
         logger.warn(`No handler found for callback prefix: ${handlerName}`);
         bot.answerCallbackQuery(callbackQuery.id, { text: 'Perintah tidak dikenali.', show_alert: true });
     }
 });
 
-logger.info(`Bot Telegram Cloudflare siap.`);
-
-// Ekspor bot untuk webhook
-module.exports = bot;
+logger.info('Bot Telegram Cloudflare siap.');
