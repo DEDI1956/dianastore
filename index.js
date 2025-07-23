@@ -33,11 +33,11 @@ fs.readdirSync(handlersPath).forEach(file => {
 // Handler utama untuk callback query
 bot.on('callback_query', (callbackQuery) => {
     const data = callbackQuery.data;
-    const chatId = callbackQuery.message.chat.id;
+    const msg = callbackQuery.message;
+    const chatId = msg.chat.id;
 
     // Hapus state percakapan sebelumnya jika memulai alur baru dari menu
     if (data === 'main_menu' || data === 'dns_menu' || data === 'worker_menu') {
-         // Simpan kredensial jika ada, hapus sisanya
         const creds = {
             apiToken: userState[chatId] ? userState[chatId].apiToken : undefined,
             accountId: userState[chatId] ? userState[chatId].accountId : undefined,
@@ -56,6 +56,14 @@ bot.on('callback_query', (callbackQuery) => {
     } else if (data === 'main_menu') {
         const startHandler = require('./handlers/start');
         startHandler.sendStartMessage(bot, chatId);
+    } else if (data === 'logout') {
+        delete userState[chatId];
+        bot.answerCallbackQuery(callbackQuery.id, { text: '✅ Kamu berhasil logout.' });
+        bot.editMessageText('Anda telah logout. Ketik /start untuk memulai lagi.', {
+            chat_id: chatId,
+            message_id: msg.message_id,
+            reply_markup: null
+        });
     }
 });
 
