@@ -2,20 +2,41 @@ const axios = require('axios');
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const FormData = require('form-data');
 const { sendStartMessage } = require('./start');
 
 const CLOUDFLARE_API_BASE_URL = 'https://api.cloudflare.com/client/v4';
 
 // --- Fungsi Helper ---
-const getCfHeaders = (apiToken, contentType = 'application/json') => ({
-    'Authorization': `Bearer ${apiToken}`,
-    'Content-Type': contentType
-});
+const getCfHeaders = (apiToken, form = null) => {
+    const headers = {
+        'Authorization': `Bearer ${apiToken}`
+    };
+    if (form) {
+        return { ...headers, ...form.getHeaders() };
+    }
+    return { ...headers, 'Content-Type': 'application/json' };
+};
 
 const isValidWorkerName = (name) => {
     const regex = /^[a-z0-9-]+$/;
     return regex.test(name);
 };
+
+/**
+ * Menganalisis konten skrip untuk mendeteksi apakah itu ES Module.
+ * @param {string} scriptContent Konten file worker.
+ * @returns {'module' | 'service'} Tipe worker.
+ */
+const detectWorkerType = (scriptContent) => {
+    // Regex untuk mendeteksi 'import' atau 'export' di awal baris (setelah spasi/tab)
+    const moduleRegex = /^(?:\s*|.*\s+)(?:import|export)\s+/m;
+    if (moduleRegex.test(scriptContent)) {
+        return 'module';
+    }
+    return 'service';
+};
+
 
 // --- Fungsi Menu ---
 const sendWorkerMenu = (bot, chatId, accountIdentifier) => {
@@ -63,7 +84,6 @@ module.exports = (bot, userState) => {
                 case 'awaiting_worker_account_id':
                     state.accountId = text;
                     bot.sendMessage(chatId, 'Memvalidasi kredensial...');
-                    // Validasi dengan mencoba mengambil daftar worker
                     await axios.get(`${CLOUDFLARE_API_BASE_URL}/accounts/${state.accountId}/workers/scripts`, {
                         headers: getCfHeaders(state.apiToken)
                     });
@@ -76,7 +96,7 @@ module.exports = (bot, userState) => {
                 case 'worker_deploy_name':
                     if (!isValidWorkerName(text)) {
                         bot.sendMessage(chatId, "❌ Nama Worker tidak valid. Gunakan huruf kecil, angka, dan dash `-` saja, tanpa spasi atau simbol lain. Silakan masukkan ulang:");
-                        return; // Tetap di step yang sama
+                        return;
                     }
                     state.workerName = text;
                     state.step = 'worker_deploy_repo';
@@ -90,7 +110,6 @@ module.exports = (bot, userState) => {
 
                     bot.sendMessage(chatId, `Mencoba meng-clone repository dari ${state.repoUrl}...`);
 
-                    // Hapus direktori lama jika ada
                     if (fs.existsSync(localRepoPath)) {
                         fs.rmSync(localRepoPath, { recursive: true, force: true });
                     }
@@ -104,12 +123,12 @@ module.exports = (bot, userState) => {
                             return;
                         }
 
-                        bot.sendMessage(chatId, '✅ Repository berhasil di-clone. Membaca file worker...');
+                        bot.sendMessage(chatId, '✅ Repository berhasil di-clone. Menganalisa file worker...');
 
                         const files = fs.readdirSync(localRepoPath);
-                        const jsFile = files.find(f => f.endsWith('.js') && (f === 'index.js' || f === 'worker.js' || f === 'src/index.js'));
+                        const jsFileName = files.find(f => f.endsWith('.js') && (f === 'index.js' || f === 'worker.js' || f === 'src/index.js'));
 
-                        if (!jsFile) {
+                        if (!jsFileName) {
                             bot.sendMessage(chatId, '❌ Tidak dapat menemukan file worker utama (index.js, worker.js, atau src/index.js).', {
                                 reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke menu Worker', callback_data: 'worker_menu_loggedin' }]] }
                             });
@@ -118,15 +137,30 @@ module.exports = (bot, userState) => {
                             return;
                         }
 
-                        const scriptContent = fs.readFileSync(path.join(localRepoPath, jsFile), 'utf-8');
+                        const scriptContent = fs.readFileSync(path.join(localRepoPath, jsFileName), 'utf-8');
+                        const workerType = detectWorkerType(scriptContent);
 
-                        bot.sendMessage(chatId, `Mendeploy worker dengan nama \`${state.workerName}\`...`);
+                        bot.sendMessage(chatId, `Worker terdeteksi sebagai tipe: *${workerType}*. Mendeploy dengan nama \`${state.workerName}\`...`, {parse_mode: 'Markdown'});
+
+                        const form = new FormData();
+                        const metadata = {
+                            main_module: workerType === 'module' ? jsFileName : undefined,
+                            body_part: workerType === 'service' ? 'script' : undefined,
+                        };
+
+                        form.append('metadata', JSON.stringify(metadata));
+
+                        if (workerType === 'module') {
+                            form.append(jsFileName, scriptContent, { filename: jsFileName, contentType: 'application/javascript+module' });
+                        } else {
+                            form.append('script', scriptContent, { contentType: 'application/javascript' });
+                        }
 
                         try {
                             await axios.put(
                                 `${CLOUDFLARE_API_BASE_URL}/accounts/${state.accountId}/workers/scripts/${state.workerName}`,
-                                scriptContent,
-                                { headers: getCfHeaders(state.apiToken, 'application/javascript') }
+                                form,
+                                { headers: getCfHeaders(state.apiToken, form) }
                             );
 
                             const successText = `\
@@ -134,6 +168,7 @@ module.exports = (bot, userState) => {
 ✅ *Worker Berhasil Dideploy*
 
 📄 Nama Worker: \`${state.workerName}\`
+🔧 Tipe: ${workerType}
 🔗 Repository: \`${state.repoUrl}\`
 ✅ Status: Sukses
 ━━━━━━━━━━━━━━━━━━`;
