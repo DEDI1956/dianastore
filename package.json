@@ -1,0 +1,27 @@
+{
+  "name": "telegram-cf-bot",
+  "version": "1.0.0",
+  "description": "Bot Telegram untuk mengelola Cloudflare DNS dan Workers",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "cloudflare",
+    "dns",
+    "workers"
+  ],
+  "author": "Jules",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^0.21.1",
+    "dotenv": "^10.0.0",
+    "node-telegram-bot-api": "^0.54.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.12"
+  }
+}
