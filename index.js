@@ -4,6 +4,7 @@ const config = require('./config');
 const fs = require('fs');
 const path = require('path');
 const logger = require('./utils/logger');
+const { handleTextMessage } = require('./handlers/message');
 
 const token = process.env.TELEGRAM_TOKEN || config.telegramToken;
 const bot = new TelegramBot(token, { polling: { interval: 1000, params: { timeout: 10 } } });
@@ -18,22 +19,31 @@ const userState = {};
 const handlers = {};
 const handlersPath = path.join(__dirname, 'handlers');
 
+// Muat semua modul handler
 fs.readdirSync(handlersPath).forEach(file => {
-    if (file.endsWith('.js')) {
+    if (file.endsWith('.js') && file !== 'message.js') { // Jangan muat message handler sebagai callback handler
         try {
             const handlerName = path.basename(file, '.js');
-            const handlerModule = require(path.join(handlersPath, file));
-            if (typeof handlerModule.register === 'function') {
-                handlerModule.register(bot, userState, logger);
-            }
-            handlers[handlerName] = handlerModule;
-            logger.info(`Handler '${handlerName}' berhasil dimuat.`);
+            handlers[handlerName] = require(path.join(handlersPath, file));
+            logger.info(`Handler module '${handlerName}' berhasil dimuat.`);
         } catch (error) {
             logger.error(`Gagal memuat handler ${file}: ${error.stack}`);
         }
     }
 });
 
+// --- Listener Tunggal ---
+// Listener untuk /start
+handlers['start'].register(bot, userState, logger);
+
+// Listener untuk semua pesan teks lainnya
+bot.on('message', (msg) => {
+    // Abaikan command /start karena sudah ditangani
+    if (msg.text && msg.text.startsWith('/start')) return;
+    handleTextMessage(bot, userState, logger, msg);
+});
+
+// Listener untuk semua callback query
 bot.on('callback_query', (callbackQuery) => {
     try {
         const { data, message } = callbackQuery;
