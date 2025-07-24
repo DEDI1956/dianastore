@@ -1,19 +1,35 @@
 const sendStartMessage = (bot, chatId) => {
-    // ... (kode sendStartMessage tetap sama)
+    const text = `\
+━━━━━━━━━━━━━━━━━━
+🤖 *Selamat Datang!*
+Pilih fitur yang tersedia:
+━━━━━━━━━━━━━━━━━━`;
+
+    const options = {
+        parse_mode: 'Markdown',
+        reply_markup: {
+            inline_keyboard: [
+                [{ text: '📡 Manajemen DNS', callback_data: 'dns_menu' }],
+                [{ text: '⚙️ Manajemen Worker', callback_data: 'worker_menu' }],
+                [{ text: '🚪 Logout', callback_data: 'logout' }]
+            ]
+        }
+    };
+    bot.sendMessage(chatId, text, options);
 };
 
 const register = (bot, userState, logger) => {
     bot.onText(/\/start/, (msg) => {
         try {
             const chatId = msg.chat.id;
-            logger.info(`User ${chatId} started the bot.`);
-            if(userState[chatId]) {
+            logger.info(`User ${chatId} issued /start command.`);
+            if (userState[chatId]) {
                 delete userState[chatId];
+                logger.info(`State for user ${chatId} cleared.`);
             }
             sendStartMessage(bot, chatId);
         } catch (error) {
             logger.error(`Error in /start handler: ${error.stack}`);
-            bot.sendMessage(msg.chat.id, 'Terjadi kesalahan saat memulai bot. Silakan coba lagi.');
         }
     });
 };
@@ -24,7 +40,7 @@ const handle = (bot, userState, callbackQuery, logger) => {
         bot.answerCallbackQuery(callbackQuery.id).catch(err => logger.error(`answerCallbackQuery failed: ${err.stack}`));
         sendStartMessage(bot, chatId);
     } catch (error) {
-        logger.error(`Error in start handle function: ${error.stack}`);
+        logger.error(`Error in start.handle function: ${error.stack}`);
     }
 };
 

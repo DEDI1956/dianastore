@@ -6,7 +6,11 @@ const path = require('path');
 const logger = require('./utils/logger');
 
 const token = process.env.TELEGRAM_TOKEN || config.telegramToken;
-const bot = new TelegramBot(token, { polling: true });
+const bot = new TelegramBot(token, { polling: { interval: 1000, params: { timeout: 10 } } });
+
+bot.on('polling_error', (error) => {
+    logger.error(`[Polling Error] ${error.code} - ${error.message}`);
+});
 
 logger.info('Bot berjalan dalam mode POLLING.');
 
@@ -30,36 +34,35 @@ fs.readdirSync(handlersPath).forEach(file => {
     }
 });
 
-// Router Callback Query Utama
 bot.on('callback_query', (callbackQuery) => {
     try {
         const { data, message } = callbackQuery;
         const chatId = message.chat.id;
         logger.info(`[Callback] ChatID: ${chatId}, Data: ${data}`);
 
-        const handlerName = data.split('_')[0];
+        const handlerPrefix = data.split('_')[0];
 
-        if (handlers[handlerName] && typeof handlers[handlerName].handle === 'function') {
-            handlers[handlerName].handle(bot, userState, callbackQuery, logger);
+        // Rute ke handler yang sesuai
+        if (handlers[handlerPrefix] && typeof handlers[handlerPrefix].handle === 'function') {
+            handlers[handlerPrefix].handle(bot, userState, callbackQuery, logger);
+        } else if (data === 'main_menu') {
+            handlers['start'].handle(bot, userState, callbackQuery, logger);
         } else if (data === 'logout') {
             delete userState[chatId];
             bot.answerCallbackQuery(callbackQuery.id, { text: '✅ Kamu berhasil logout.' });
             bot.editMessageText('Anda telah logout. Ketik /start untuk memulai lagi.', {
-                chat_id: chatId,
-                message_id: message.message_id,
-                reply_markup: null
+                chat_id: chatId, message_id: message.message_id, reply_markup: null
             });
             logger.info(`User ${chatId} logged out.`);
-        } else if (data === 'main_menu') {
-            handlers['start'].handle(bot, userState, callbackQuery, logger);
         } else {
-            logger.warn(`No handler found for callback prefix: ${handlerName}`);
+            logger.warn(`No handler found for callback prefix: ${handlerPrefix}`);
             bot.answerCallbackQuery(callbackQuery.id, { text: 'Perintah tidak dikenali.', show_alert: true });
         }
     } catch (error) {
         logger.error(`[FATAL] Uncaught error in callback_query listener: ${error.stack}`);
-        const chatId = callbackQuery.message.chat.id;
-        bot.sendMessage(chatId, '🤖 Terjadi kesalahan fatal. Saya telah memberi tahu pengembang saya. Silakan coba lagi nanti.');
+        if(callbackQuery.message) {
+             bot.sendMessage(callbackQuery.message.chat.id, '🤖 Terjadi kesalahan fatal. Silakan coba lagi nanti.');
+        }
     }
 });
 
