@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { ensureLoggedIn } = require('./auth');
+const { ensureLoggedInDns } = require('./auth');
 
 const CLOUDFLARE_API_BASE_URL = 'https://api.cloudflare.com/client/v4';
 const getCfHeaders = (apiToken) => ({ 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' });
@@ -40,7 +40,7 @@ const register = (bot, userState, logger) => {
                     state.recordContent = text;
                     state.step = 'dns_await_proxy';
                     bot.sendMessage(chatId, `✅ Konten: \`${text}\`\nAktifkan proxy?`, {
-                        reply_markup: { inline_keyboard: [[{ text: 'ON', callback_data: 'dns_proxy_on' }, { text: 'OFF', callback_data: 'dns_proxy_off' }]] }
+                        reply_markup: { inline_keyboard: [[{ text: 'dns_proxy_on' }, { text: 'OFF', callback_data: 'dns_proxy_off' }]] }
                     });
                     break;
             }
@@ -84,7 +84,7 @@ const handle = (bot, userState, callbackQuery, logger) => {
                 const [,,, id] = data.split('_');
                 axios.delete(`${CLOUDFLARE_API_BASE_URL}/zones/${state.zoneId}/dns_records/${id}`, { headers: getCfHeaders(state.apiToken) })
                     .then(() => {
-                        bot.editMessageText('✅ Record berhasil dihapus.', { chat_id: chatId, message_id: message.message_id });
+                        bot.editMessageText('✅ Record berhasil dihapus.', { chat_id: chatId, message_id: message.message_id, reply_markup: null });
                         sendDnsMenu(bot, chatId);
                     }).catch(err => { throw err; });
                 return;
@@ -130,7 +130,7 @@ const handle = (bot, userState, callbackQuery, logger) => {
         }
     };
 
-    ensureLoggedIn(bot, userState, chatId, 'dns', action);
+    ensureLoggedInDns(bot, userState, chatId, action);
 };
 
 module.exports = { register, handle };
