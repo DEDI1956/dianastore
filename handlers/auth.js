@@ -8,7 +8,7 @@ const getCfHeaders = (apiToken) => ({
 
 const startLoginFlow = (bot, userState, chatId, requiredPerm, onSuccess) => {
     userState[chatId] = {
-        ...(userState[chatId] || {}), // Pertahankan kredensial yang mungkin sudah ada
+        ...(userState[chatId] || {}),
         step: 'auth_await_token',
         requiredPerm: requiredPerm,
         onSuccess: onSuccess,
@@ -42,10 +42,10 @@ const register = (bot, userState, logger) => {
         if (!state || state.step !== 'auth_await_token') return;
 
         const text = msg.text.trim();
-        logger.info(`[Auth] ChatID: ${chatId} received token.`);
+        logger.info(`[Auth] ChatID: ${chatId} received token for perm: ${state.requiredPerm}`);
 
         try {
-            bot.sendMessage(chatId, `Memvalidasi token...`);
+            await bot.sendMessage(chatId, `Memvalidasi token...`);
             const apiToken = text;
 
             await axios.get(`${CLOUDFLARE_API_BASE_URL}/user`, { headers: getCfHeaders(apiToken) });
@@ -55,19 +55,19 @@ const register = (bot, userState, logger) => {
             if (state.requiredPerm === 'dns') {
                 const response = await axios.get(`${CLOUDFLARE_API_BASE_URL}/zones`, { headers: getCfHeaders(apiToken) });
                 const zones = response.data.result;
-                if (zones.length === 0) throw new Error('Tidak ada Zona (domain) yang ditemukan di akun Anda.');
+                if (!zones || zones.length === 0) throw new Error('Tidak ada Zona (domain) yang ditemukan di akun Anda.');
 
                 const keyboard = zones.map(zone => ([{ text: zone.name, callback_data: `auth_set_zone_${zone.id}_${zone.account.id}` }]));
-                bot.sendMessage(chatId, '✅ Token valid! Pilih zona (domain) yang ingin Anda kelola:', { reply_markup: { inline_keyboard: keyboard } });
+                await bot.sendMessage(chatId, '✅ Token valid! Pilih zona (domain) yang ingin Anda kelola:', { reply_markup: { inline_keyboard: keyboard } });
                 delete state.step;
 
             } else if (state.requiredPerm === 'worker') {
                 const response = await axios.get(`${CLOUDFLARE_API_BASE_URL}/accounts`, { headers: getCfHeaders(apiToken) });
                 const accounts = response.data.result;
-                if (accounts.length === 0) throw new Error('Tidak ada Akun yang ditemukan.');
+                if (!accounts || accounts.length === 0) throw new Error('Tidak ada Akun yang ditemukan.');
 
                 const keyboard = accounts.map(acc => ([{ text: acc.name, callback_data: `auth_set_account_${acc.id}` }]));
-                bot.sendMessage(chatId, '✅ Token valid! Pilih akun yang ingin Anda kelola:', { reply_markup: { inline_keyboard: keyboard } });
+                await bot.sendMessage(chatId, '✅ Token valid! Pilih akun yang ingin Anda kelola:', { reply_markup: { inline_keyboard: keyboard } });
                 delete state.step;
             }
 
@@ -75,7 +75,7 @@ const register = (bot, userState, logger) => {
             delete state.apiToken;
             const errorMessage = error.response?.status === 401 ? 'Unauthorized. API Token tidak valid.' : error.message;
             logger.error(`[Auth] Login failed for ${chatId}: ${errorMessage}`);
-            bot.sendMessage(chatId, `❌ Gagal: ${errorMessage}\nSilakan coba masukkan API Token yang benar:`);
+            await bot.sendMessage(chatId, `❌ Gagal: ${errorMessage}\nSilakan coba masukkan API Token yang benar:`);
         }
     });
 };
@@ -85,27 +85,41 @@ const handle = (bot, userState, callbackQuery, logger) => {
     const chatId = message.chat.id;
     const state = userState[chatId];
 
-    if (!state) return;
+    if (!state) {
+        logger.warn(`[Auth Handle] No state found for chatId ${chatId} on callback.`);
+        return;
+    }
 
     try {
         bot.answerCallbackQuery(callbackQuery.id);
 
+        let successMessage = '';
         if (data.startsWith('auth_set_account_')) {
-            state.accountId = data.replace('auth_set_account_', '');
-            bot.editMessageText(`✅ Akun "${message.reply_markup.inline_keyboard[0][0].text}" dipilih.`, { chat_id: chatId, message_id: message.message_id });
+            const accountId = data.replace('auth_set_account_', '');
+            state.accountId = accountId;
+            successMessage = `✅ Akun "${message.reply_markup.inline_keyboard.flat().find(btn => btn.callback_data === data)?.text}" dipilih.`;
+            bot.editMessageText(successMessage, { chat_id: chatId, message_id: message.message_id });
         } else if (data.startsWith('auth_set_zone_')) {
             const [, , , zoneId, accountId] = data.split('_');
             state.zoneId = zoneId;
             state.accountId = accountId;
-            bot.editMessageText(`✅ Zona "${message.reply_markup.inline_keyboard[0][0].text}" dipilih.`, { chat_id: chatId, message_id: message.message_id });
+            successMessage = `✅ Zona "${message.reply_markup.inline_keyboard.flat().find(btn => btn.callback_data === data)?.text}" dipilih.`;
+            bot.editMessageText(successMessage, { chat_id: chatId, message_id: message.message_id });
         }
 
         logger.info(`[Auth] Credentials set for ${chatId}: AccountID=${state.accountId}, ZoneID=${state.zoneId || 'N/A'}`);
 
-        if (typeof state.onSuccess === 'function') {
+        // Cek apakah login sudah lengkap
+        const isLoggedIn = (state.requiredPerm === 'dns' && state.zoneId) || (state.requiredPerm === 'worker' && state.accountId);
+
+        if (isLoggedIn && typeof state.onSuccess === 'function') {
+            logger.info(`[Auth] Login complete for ${chatId}, executing onSuccess callback.`);
             const onSuccess = state.onSuccess;
             delete state.onSuccess;
+            delete state.requiredPerm;
             onSuccess();
+        } else {
+             logger.warn(`[Auth] Login not yet complete for ${chatId} or onSuccess is not a function.`);
         }
     } catch(error) {
         logger.error(`[Auth Callback] Error: ${error.stack}`);
