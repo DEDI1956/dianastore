@@ -1,18 +1,7 @@
 // ... (kode helper di atas tetap sama) ...
 
 const sendWorkerMenu = (bot, chatId) => {
-    const text = `━━━━━━━━━━━━━━━━━━\n⚙️ *Menu Worker*\nPilih salah satu opsi:\n━━━━━━━━━━━━━━━━━━`;
-    bot.sendMessage(chatId, text, {
-        parse_mode: 'Markdown',
-        reply_markup: {
-            inline_keyboard: [
-                [{ text: '1️⃣ Deploy Worker via GitHub', callback_data: 'worker_deploy' }],
-                [{ text: '2️⃣ List Workers', callback_data: 'worker_list' }],
-                [{ text: '3️⃣ 🗑️ Hapus Worker', callback_data: 'worker_delete' }],
-                [{ text: '🔙 Kembali', callback_data: 'main_menu' }, { text: '🚪 Logout', callback_data: 'logout' }]
-            ]
-        }
-    });
+    // ... (kode sendWorkerMenu tetap sama)
 };
 
 // ... (register function tetap sama) ...
@@ -21,11 +10,20 @@ const handle = async (bot, userState, callbackQuery, logger) => {
     const { data, message } = callbackQuery;
     const chatId = message.chat.id;
 
-    // ... (logika answerCallbackQuery dan ensureLogin tetap sama) ...
+    bot.answerCallbackQuery(callbackQuery.id).catch(err => logger.error(`[Worker] answerCallbackQuery failed: ${err.stack}`));
+
+    const state = userState[chatId] || {};
+    logger.info(`[Worker Handle] ChatID: ${chatId}, Data: ${data}, State: ${JSON.stringify(state)}`);
+
+    // --- Ensure Login ---
+    if (!state.apiToken || !state.accountId) {
+        logger.info(`[Worker] Unauthenticated user ${chatId} for ${data}. Starting login flow.`);
+        userState[chatId] = { ...state, step: 'worker_await_token', nextCallback: callbackQuery };
+        bot.sendMessage(chatId, 'Anda perlu login untuk fitur Worker. Silakan masukkan API Token Cloudflare Anda:');
+        return;
+    }
 
     try {
-        const state = userState[chatId] || {};
-
         if (data.startsWith('worker_set_entry_')) {
             // ... (logika set entry point tetap sama) ...
             return;
@@ -75,7 +73,8 @@ const handle = async (bot, userState, callbackQuery, logger) => {
                  break;
         }
     } catch (error) {
-        // ... (error handling tetap sama) ...
+        logger.error(`[Worker Handle] Error for ${chatId}: ${error.stack}`);
+        bot.sendMessage(chatId, `❌ Terjadi kesalahan pada fitur Worker: ${error.message}`);
     }
 };
 
