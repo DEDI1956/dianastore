@@ -6,27 +6,31 @@ const getCfHeaders = (apiToken) => ({
     'Content-Type': 'application/json'
 });
 
-const ensureLoggedIn = (bot, userState, chatId, requiredPerm, onSuccess) => {
+const startLoginFlow = (bot, userState, chatId, requiredPerm, onSuccess) => {
+    userState[chatId] = {
+        ...(userState[chatId] || {}), // Pertahankan kredensial yang mungkin sudah ada
+        step: 'auth_await_token',
+        requiredPerm: requiredPerm,
+        onSuccess: onSuccess,
+    };
+    bot.sendMessage(chatId, `Untuk melanjutkan, Anda perlu login ke Cloudflare.\n\nSilakan masukkan API Token Anda:`);
+};
+
+const ensureLoggedInDns = (bot, userState, chatId, onSuccess) => {
     const state = userState[chatId] || {};
-
-    const hasToken = !!state.apiToken;
-    const hasWorkerPerms = hasToken && !!state.accountId;
-    const hasDnsPerms = hasWorkerPerms && !!state.zoneId;
-
-    let isMet = false;
-    if (requiredPerm === 'worker') isMet = hasWorkerPerms;
-    if (requiredPerm === 'dns') isMet = hasDnsPerms;
-
-    if (isMet) {
+    if (state.apiToken && state.accountId && state.zoneId) {
         onSuccess();
     } else {
-        userState[chatId] = {
-            ...state,
-            step: 'auth_await_token',
-            requiredPerm: requiredPerm,
-            onSuccess: onSuccess,
-        };
-        bot.sendMessage(chatId, `Untuk melanjutkan, Anda perlu login ke Cloudflare.\n\nSilakan masukkan API Token Anda:`);
+        startLoginFlow(bot, userState, chatId, 'dns', onSuccess);
+    }
+};
+
+const ensureLoggedInWorker = (bot, userState, chatId, onSuccess) => {
+    const state = userState[chatId] || {};
+    if (state.apiToken && state.accountId) {
+        onSuccess();
+    } else {
+        startLoginFlow(bot, userState, chatId, 'worker', onSuccess);
     }
 };
 
@@ -35,20 +39,16 @@ const register = (bot, userState, logger) => {
         const chatId = msg.chat.id;
         const state = userState[chatId];
 
-        // Kondisi yang diperbaiki: hanya berjalan jika state ada dan step-nya adalah 'auth_await_token'
         if (!state || state.step !== 'auth_await_token') return;
 
         const text = msg.text.trim();
-        logger.info(`[Auth] ChatID: ${chatId} received message for step: ${state.step}`);
+        logger.info(`[Auth] ChatID: ${chatId} received token.`);
 
         try {
             bot.sendMessage(chatId, `Memvalidasi token...`);
             const apiToken = text;
 
-            // Validasi token
             await axios.get(`${CLOUDFLARE_API_BASE_URL}/user`, { headers: getCfHeaders(apiToken) });
-
-            // Simpan token yang valid
             state.apiToken = apiToken;
             logger.info(`[Auth] Token for ${chatId} is valid.`);
 
@@ -59,7 +59,7 @@ const register = (bot, userState, logger) => {
 
                 const keyboard = zones.map(zone => ([{ text: zone.name, callback_data: `auth_set_zone_${zone.id}_${zone.account.id}` }]));
                 bot.sendMessage(chatId, '✅ Token valid! Pilih zona (domain) yang ingin Anda kelola:', { reply_markup: { inline_keyboard: keyboard } });
-                delete state.step; // Hapus step karena menunggu callback
+                delete state.step;
 
             } else if (state.requiredPerm === 'worker') {
                 const response = await axios.get(`${CLOUDFLARE_API_BASE_URL}/accounts`, { headers: getCfHeaders(apiToken) });
@@ -68,32 +68,30 @@ const register = (bot, userState, logger) => {
 
                 const keyboard = accounts.map(acc => ([{ text: acc.name, callback_data: `auth_set_account_${acc.id}` }]));
                 bot.sendMessage(chatId, '✅ Token valid! Pilih akun yang ingin Anda kelola:', { reply_markup: { inline_keyboard: keyboard } });
-                delete state.step; // Hapus step karena menunggu callback
+                delete state.step;
             }
 
         } catch (error) {
-            delete state.apiToken; // Hapus token yang salah jika ada
-            const errorMessage = error.response?.data?.errors?.[0]?.message || 'API Token tidak valid.';
+            delete state.apiToken;
+            const errorMessage = error.response?.status === 401 ? 'Unauthorized. API Token tidak valid.' : error.message;
             logger.error(`[Auth] Login failed for ${chatId}: ${errorMessage}`);
             bot.sendMessage(chatId, `❌ Gagal: ${errorMessage}\nSilakan coba masukkan API Token yang benar:`);
         }
     });
 };
 
-// Fungsi handle ini akan dipanggil oleh router utama di index.js
 const handle = (bot, userState, callbackQuery, logger) => {
     const { data, message } = callbackQuery;
     const chatId = message.chat.id;
     const state = userState[chatId];
 
-    if (!state) return; // Seharusnya tidak terjadi, tapi sebagai pengaman
+    if (!state) return;
 
     try {
         bot.answerCallbackQuery(callbackQuery.id);
 
         if (data.startsWith('auth_set_account_')) {
-            const accountId = data.replace('auth_set_account_', '');
-            state.accountId = accountId;
+            state.accountId = data.replace('auth_set_account_', '');
             bot.editMessageText(`✅ Akun "${message.reply_markup.inline_keyboard[0][0].text}" dipilih.`, { chat_id: chatId, message_id: message.message_id });
         } else if (data.startsWith('auth_set_zone_')) {
             const [, , , zoneId, accountId] = data.split('_');
@@ -106,7 +104,7 @@ const handle = (bot, userState, callbackQuery, logger) => {
 
         if (typeof state.onSuccess === 'function') {
             const onSuccess = state.onSuccess;
-            delete state.onSuccess; // Hapus agar tidak dipanggil lagi
+            delete state.onSuccess;
             onSuccess();
         }
     } catch(error) {
@@ -115,9 +113,9 @@ const handle = (bot, userState, callbackQuery, logger) => {
     }
 };
 
-
 module.exports = {
-    ensureLoggedIn,
+    ensureLoggedInDns,
+    ensureLoggedInWorker,
     register,
     handle,
 };
