@@ -42,7 +42,6 @@ bot.on('callback_query', (callbackQuery) => {
 
         const handlerPrefix = data.split('_')[0];
 
-        // Rute ke handler yang sesuai
         if (handlers[handlerPrefix] && typeof handlers[handlerPrefix].handle === 'function') {
             handlers[handlerPrefix].handle(bot, userState, callbackQuery, logger);
         } else if (data === 'main_menu') {
